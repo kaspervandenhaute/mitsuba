@@ -9,7 +9,31 @@
 MTS_NAMESPACE_BEGIN
 
 MyPathTracer::MyPathTracer(const Properties &props)
- : Integrator(props) { }
+ : Integrator(props) {
+        m_config.maxDepth = props.getInteger("maxDepth", -1);
+        m_config.rrDepth = props.getInteger("rrDepth", 5);
+        m_config.technique = props.getBoolean("bidirectional", false) ?
+            PathSampler::EBidirectional : PathSampler::EUnidirectional;
+        m_config.twoStage = props.getBoolean("twoStage", false);
+        m_config.firstStageSizeReduction = props.getInteger(
+            "firstStageSizeReduction", 16);
+        m_config.firstStage= props.getBoolean("firstStage", false);
+        m_config.luminanceSamples = props.getInteger("luminanceSamples", 0);
+        m_config.pLarge = props.getFloat("pLarge", 0.f);
+        m_config.directSamples = props.getInteger("directSamples", -1);
+        m_config.separateDirect = m_config.directSamples >= 0;
+        m_config.kelemenStyleWeights = props.getBoolean("kelemenStyleWeights", true);
+        m_config.directSampling = props.getBoolean(
+                "directSampling", false);
+        m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
+        m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
+        Assert(m_config.mutationSizeLow > 0 && m_config.mutationSizeHigh > 0 &&
+               m_config.mutationSizeLow < 1 && m_config.mutationSizeHigh < 1 &&
+               m_config.mutationSizeLow < m_config.mutationSizeHigh);
+        m_config.workUnits = props.getInteger("workUnits", -1);
+        /* Stop MLT after X seconds -- useful for equal-time comparisons */
+        m_config.timeout = props.getInteger("timeout", 0);
+  }
 
 MyPathTracer::MyPathTracer(Stream *stream, InstanceManager *manager)
  : Integrator(stream, manager) { }
@@ -41,26 +65,77 @@ bool MyPathTracer::render(Scene *scene,
 
     // MLT setup with rplSampler and stuff
 
-    /* This is a sampling-based integrator - parallelize */
-    ref<ParallelProcess> proc = new BlockedRenderProcess(job,
-        queue, scene->getBlockSize());
-    int integratorResID = sched->registerResource(this);
-    proc->bindResource("integrator", integratorResID);
-    proc->bindResource("scene", sceneResID);
-    proc->bindResource("sensor", sensorResID);
-    proc->bindResource("sampler", samplerResID);
-    scene->bindUsedResources(proc);
-    bindUsedResources(proc);
-    sched->schedule(proc);
+     if (m_config.workUnits <= 0) {
+            const size_t cropArea  = (size_t) cropSize.x * cropSize.y;
+            const size_t workUnits = ((desiredMutationsPerWorkUnit - 1) +
+                (cropArea * sampleCount)) / desiredMutationsPerWorkUnit;
+            Assert(workUnits <= (size_t) std::numeric_limits<int>::max());
+            m_config.workUnits = (int) std::max(workUnits, (size_t) 1);
+        }
 
-    m_process = proc;
-    sched->wait(proc);
-    m_process = NULL;
+    /* Create a sampler instance for each worker */
+    ref<PSSMLTSampler> mltSampler = new PSSMLTSampler(m_config);
+    std::vector<SerializableObject *> mltSamplers(scheduler->getCoreCount());
+    for (size_t i=0; i<mltSamplers.size(); ++i) {
+        ref<Sampler> clonedSampler = mltSampler->clone();
+        clonedSampler->incRef();
+        mltSamplers[i] = clonedSampler.get();
+    }
+    int mltSamplerResID = scheduler->registerMultiResource(mltSamplers);
+    for (size_t i=0; i<scheduler->getCoreCount(); ++i)
+        mltSamplers[i]->decRef();
+
+    m_config.nMutations = (cropSize.x * cropSize.y *
+    sampleCount) / m_config.workUnits;
+
+    ref<ReplayableSampler> rplSampler = new ReplayableSampler();
+
+
+    int integratorResID = sched->registerResource(this);
+
+    for (int iter=0; iter<10; ++iter) {
+        /* This is a sampling-based integrator - parallelize */
+        ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
+        
+        proc->bindResource("integrator", integratorResID);
+        proc->bindResource("scene", sceneResID);
+        proc->bindResource("sensor", sensorResID);
+        proc->bindResource("sampler", samplerResID);
+        scene->bindUsedResources(proc);
+        bindUsedResources(proc);
+        sched->schedule(proc);
+
+        m_process = proc;
+        sched->wait(proc);
+        m_process = NULL;
+        
+
+        if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
+            Log(EError, "Error while path tracing.");
+        }
+     
+
+        ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
+        int rplSamplerResID = scheduler->registerResource(rplSampler);
+        process->bindResource("scene", sceneResID);
+        process->bindResource("sensor", sensorResID);
+        process->bindResource("sampler", mltSamplerResID);
+        process->bindResource("rplSampler", rplSamplerResID);
+
+        m_process = process;
+        scheduler->schedule(process);
+        scheduler->wait(process);
+        m_process = NULL;
+        scheduler->unregisterResource(rplSamplerResID);
+        process->develop();
+
+        if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
+            Log(EError, "Error while mlting.");
+        }    
+    }
     sched->unregisterResource(integratorResID);
 
-    return proc->getReturnStatus() == ParallelProcess::ESuccess;
-
-    // Here comes the MLT stuff
+    return true;
 }
 
 void MyPathTracer::bindUsedResources(ParallelProcess *) const {

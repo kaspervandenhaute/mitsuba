@@ -43,6 +43,10 @@ plugins += bidirEnv.SharedLibrary('erpt',
 
 # My integrators
 
+myEnv = bidirEnv.Clone()
+myEnv.Append(LIBS=['plugins/pssmlt'])
+myEnv.Append(LIBPATH=['#src/integrators/pssmlt'])
+
 plugins += bidirEnv.SharedLibrary('myintegrator', ['myIntegrator/myPathTracer.cpp',
 												   'myIntegrator/myrenderproc.cpp',
 												   # 'pssmlt/pssmlt.cpp', 'pssmlt/pssmlt_sampler.cpp', 'pssmlt/pssmlt_proc.cpp'

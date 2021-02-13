@@ -40,4 +40,12 @@ plugins += bidirEnv.SharedLibrary('erpt',
         ['erpt/erpt.cpp', 'erpt/erpt_proc.cpp']
 )
 
+
+# My integrators
+
+plugins += bidirEnv.SharedLibrary('myintegrator', ['myIntegrator/myPathTracer.cpp',
+												   'myIntegrator/myrenderproc.cpp',
+												   # 'pssmlt/pssmlt.cpp', 'pssmlt/pssmlt_sampler.cpp', 'pssmlt/pssmlt_proc.cpp'
+												   ]);
+
 Export('plugins')

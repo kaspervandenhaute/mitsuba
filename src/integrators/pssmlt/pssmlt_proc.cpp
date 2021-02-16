@@ -103,6 +103,8 @@ public:
         const PathSeed &seed = wu->getSeed();
         SplatList *current = new SplatList(), *proposed = new SplatList();
 
+        Log(EInfo, "rplSamplerIndex: %i", m_rplSampler->getSampleIndex());
+
         m_emitterSampler->reset();
         m_sensorSampler->reset();
         m_directSampler->reset();
@@ -136,8 +138,8 @@ public:
            regarding the use of random numbers during sample generation */
         if (std::abs((current->luminance - seed.luminance)
                 / seed.luminance) > Epsilon)
-            Log(EError, "Error when reconstructing a seed path: luminance "
-                "= %f, but expected luminance = %f", current->luminance, seed.luminance);
+            Log(EError, "Error when reconstructing a seed path (%i): luminance "
+                "= %f, but expected luminance = %f", seed.sampleIndex, current->luminance, seed.luminance);
 
         Log(EInfo, "Setup of mlt done");
 
@@ -197,9 +199,8 @@ public:
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
                     Spectrum value = current->getValue(k) * cumulativeWeight;
-                    Log(EInfo, value.toString().c_str());
-
                     if (!value.isZero())
+                        // Log(EInfo, value.toString().c_str());
                         result->put(current->getPosition(k), &value[0]);
                 }
 
@@ -221,8 +222,8 @@ public:
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k) * proposedWeight;
-                    Log(EInfo, value.toString().c_str());
                     if (!value.isZero())
+                        // Log(EInfo, value.toString().c_str());
                         result->put(proposed->getPosition(k), &value[0]);
                 }
 
@@ -240,11 +241,10 @@ public:
         /* Perform the last splat */
         for (size_t k=0; k<current->size(); ++k) {
             Spectrum value = current->getValue(k) * cumulativeWeight;
-             Log(EInfo, value.toString().c_str());
             if (!value.isZero())
+                // Log(EInfo, value.toString().c_str());
                 result->put(current->getPosition(k), &value[0]);
         }
-
 
         delete current;
         delete proposed;

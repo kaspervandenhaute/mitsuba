@@ -76,7 +76,7 @@ bool MyPathTracer::render(Scene *scene,
     ref<Bitmap> directImage;
 
     size_t desiredMutationsPerWorkUnit =
-            m_config.technique == PathSampler::EBidirectional ? 100000 : 200000;
+            m_config.technique == PathSampler::EBidirectional ? 1000 : 2000;
 
     if (m_config.workUnits <= 0) {
         const size_t cropArea  = (size_t) cropSize.x * cropSize.y;
@@ -98,8 +98,9 @@ bool MyPathTracer::render(Scene *scene,
     for (size_t i=0; i<sched->getCoreCount(); ++i)
         mltSamplers[i]->decRef();
 
-    m_config.nMutations = (cropSize.x * cropSize.y *
-    sampleCount) / m_config.workUnits;
+    // m_config.nMutations = (cropSize.x * cropSize.y * sampleCount) / m_config.workUnits;
+
+
 
     ref<ReplayableSampler> rplSampler = new ReplayableSampler();
 
@@ -136,7 +137,9 @@ bool MyPathTracer::render(Scene *scene,
         for (auto& seed : pathSeeds) {
             avgLuminance += seed.luminance;
         }
-        avgLuminance /= pathSeeds.size();
+        //TODO: this scales the luminance of mlt; Should be done for individual samples.
+        m_config.luminance = avgLuminance / (sampler->getSampleCount() * cropSize.x * cropSize.y);
+        m_config.nMutations = pathSeeds.size();
      
         Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", pathSeeds.size(), avgLuminance);
 
@@ -153,7 +156,7 @@ bool MyPathTracer::render(Scene *scene,
         sched->wait(process);
         m_process = NULL;
         
-        // process->develop();
+        process->develop();
 
         pathSeeds.clear();
 
@@ -193,9 +196,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
 // TODO: read parameters
     SplatList splatList;
-    ref<PathSampler> pathSampler = new PathSampler(PathSampler::EUnidirectional, scene,
-            sampler, sampler, sampler, 10, 5,
-            false, true);
+    ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
+            sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
+            m_config.separateDirect, m_config.directSampling);
 
     block->clear();
 
@@ -229,7 +232,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
-            pathSampler->sampleSplats(offset, splatList);
+            pathSampler->sampleSplats(Point2i(-1), splatList);
 
             auto spec = splatList.splats[0].second;
             auto position = splatList.splats[0].first;
@@ -241,7 +244,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 pathSeeds.emplace_back(index, luminance);
             }
 
-            block->put(position, spec, 1);
+            // block->put(position, spec, 1);
             sampler->advance();
         }
     }

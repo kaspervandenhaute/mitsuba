@@ -1,10 +1,17 @@
 
 
+#include <string>
+#include <typeinfo>
+
 #include "myPathTracer.h"
 #include <mitsuba/core/plugin.h>
 #include "myrenderproc.h"
 
+#include "../pssmlt/pssmlt_sampler.h"
+#include "../pssmlt/pssmlt_proc.h"
+
 #include <mitsuba/bidir/pathsampler.h>
+#include <mitsuba/bidir/rsampler.h>
 
 MTS_NAMESPACE_BEGIN
 
@@ -23,8 +30,7 @@ MyPathTracer::MyPathTracer(const Properties &props)
         m_config.directSamples = props.getInteger("directSamples", -1);
         m_config.separateDirect = m_config.directSamples >= 0;
         m_config.kelemenStyleWeights = props.getBoolean("kelemenStyleWeights", true);
-        m_config.directSampling = props.getBoolean(
-                "directSampling", false);
+        m_config.directSampling = props.getBoolean("directSampling", false);
         m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
         m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
         Assert(m_config.mutationSizeLow > 0 && m_config.mutationSizeHigh > 0 &&
@@ -58,31 +64,38 @@ bool MyPathTracer::render(Scene *scene,
     const Sampler *sampler = static_cast<const Sampler *>(sched->getResource(samplerResID, 0));
     size_t sampleCount = sampler->getSampleCount();
 
+    auto cropSize = film->getCropSize();
+
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
-        " %s, " SSE_STR ") ..", film->getCropSize().x, film->getCropSize().y,
+        " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
         sampleCount, sampleCount == 1 ? "sample" : "samples", nCores,
         nCores == 1 ? "core" : "cores");
 
     // MLT setup with rplSampler and stuff
 
-     if (m_config.workUnits <= 0) {
-            const size_t cropArea  = (size_t) cropSize.x * cropSize.y;
-            const size_t workUnits = ((desiredMutationsPerWorkUnit - 1) +
-                (cropArea * sampleCount)) / desiredMutationsPerWorkUnit;
-            Assert(workUnits <= (size_t) std::numeric_limits<int>::max());
-            m_config.workUnits = (int) std::max(workUnits, (size_t) 1);
-        }
+    ref<Bitmap> directImage;
+
+    size_t desiredMutationsPerWorkUnit =
+            m_config.technique == PathSampler::EBidirectional ? 100000 : 200000;
+
+    if (m_config.workUnits <= 0) {
+        const size_t cropArea  = (size_t) cropSize.x * cropSize.y;
+        const size_t workUnits = ((desiredMutationsPerWorkUnit - 1) +
+            (cropArea * sampleCount)) / desiredMutationsPerWorkUnit;
+        Assert(workUnits <= (size_t) std::numeric_limits<int>::max());
+        m_config.workUnits = (int) std::max(workUnits, (size_t) 1);
+    }
 
     /* Create a sampler instance for each worker */
     ref<PSSMLTSampler> mltSampler = new PSSMLTSampler(m_config);
-    std::vector<SerializableObject *> mltSamplers(scheduler->getCoreCount());
+    std::vector<SerializableObject *> mltSamplers(sched->getCoreCount());
     for (size_t i=0; i<mltSamplers.size(); ++i) {
         ref<Sampler> clonedSampler = mltSampler->clone();
         clonedSampler->incRef();
         mltSamplers[i] = clonedSampler.get();
     }
-    int mltSamplerResID = scheduler->registerMultiResource(mltSamplers);
-    for (size_t i=0; i<scheduler->getCoreCount(); ++i)
+    int mltSamplerResID = sched->registerMultiResource(mltSamplers);
+    for (size_t i=0; i<sched->getCoreCount(); ++i)
         mltSamplers[i]->decRef();
 
     m_config.nMutations = (cropSize.x * cropSize.y *
@@ -92,15 +105,20 @@ bool MyPathTracer::render(Scene *scene,
 
 
     int integratorResID = sched->registerResource(this);
+    int rplSamplerResID = sched->registerResource(rplSampler);
 
-    for (int iter=0; iter<10; ++iter) {
+    for (int iter=0; iter<1; ++iter) {
+
+        Log(EInfo, "Starting on path tracing in iteration %i", iter);
+
         /* This is a sampling-based integrator - parallelize */
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
+        
         
         proc->bindResource("integrator", integratorResID);
         proc->bindResource("scene", sceneResID);
         proc->bindResource("sensor", sensorResID);
-        proc->bindResource("sampler", samplerResID);
+        proc->bindResource("sampler", rplSamplerResID);
         scene->bindUsedResources(proc);
         bindUsedResources(proc);
         sched->schedule(proc);
@@ -113,26 +131,37 @@ bool MyPathTracer::render(Scene *scene,
         if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
             Log(EError, "Error while path tracing.");
         }
+
+        Float avgLuminance = 0;
+        for (auto& seed : pathSeeds) {
+            avgLuminance += seed.luminance;
+        }
+        avgLuminance /= pathSeeds.size();
      
+        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", pathSeeds.size(), avgLuminance);
 
         ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
-        int rplSamplerResID = scheduler->registerResource(rplSampler);
         process->bindResource("scene", sceneResID);
         process->bindResource("sensor", sensorResID);
         process->bindResource("sampler", mltSamplerResID);
         process->bindResource("rplSampler", rplSamplerResID);
 
+        Log(EInfo, "Binded resources");
+
         m_process = process;
-        scheduler->schedule(process);
-        scheduler->wait(process);
+        sched->schedule(process);
+        sched->wait(process);
         m_process = NULL;
-        scheduler->unregisterResource(rplSamplerResID);
-        process->develop();
+        
+        // process->develop();
+
+        pathSeeds.clear();
 
         if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
             Log(EError, "Error while mlting.");
         }    
     }
+    sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
     return true;
@@ -149,7 +178,7 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
 
 void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
-        const bool &stop, const std::vector< TPoint2<uint8_t> > &points) const {
+        const bool &stop, const std::vector< TPoint2<uint8_t> > &points) {
 
     // Float diffScaleFactor = 1.0f /
     //     std::sqrt((Float) sampler->getSampleCount());
@@ -163,7 +192,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
     // RayDifferential sensorRay;
 
 // TODO: read parameters
-    SplatList list;
+    SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(PathSampler::EUnidirectional, scene,
             sampler, sampler, sampler, 10, 5,
             false, true);
@@ -183,7 +212,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
         sampler->generate(offset);
 
         // TODO: get sample count (not from rplSampler)
-        for (size_t j = 0; j<sampler->getSampleCount(); j++) {
+        // for (size_t j = 0; j<sampler->getSampleCount(); j++) {
+        for (size_t j = 0; j<1; j++) {
             // rRec.newQuery(queryType, sensor->getMedium());
             // Point2 samplePos(Point2(offset) + Vector2(rRec.nextSample2D()));
 
@@ -197,11 +227,21 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             // sensorRay.scaleDifferential(diffScaleFactor);
 
-            //TODO: PathSampler
-            list.clear();
-            pathSampler->sampleSplats(offset, list);
+            splatList.clear();
+            auto index = sampler->getSampleIndex();
+            pathSampler->sampleSplats(offset, splatList);
+
+            auto spec = splatList.splats[0].second;
+            auto position = splatList.splats[0].first;
+            auto luminance = splatList.luminance;
             // spec *= Spectrum(0.5);
-            block->put(list.splats[0].first, list.splats[0].second, 1);
+
+            // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
+            if (luminance > 0) {
+                pathSeeds.emplace_back(index, luminance);
+            }
+
+            block->put(position, spec, 1);
             sampler->advance();
         }
     }

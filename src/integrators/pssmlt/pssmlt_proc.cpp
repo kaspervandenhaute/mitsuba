@@ -21,6 +21,9 @@
 #include "pssmlt_proc.h"
 #include "pssmlt_sampler.h"
 
+#include <string>
+
+
 MTS_NAMESPACE_BEGIN
 
 /* ==================================================================== */
@@ -61,6 +64,9 @@ public:
     }
 
     void prepare() {
+
+        Log(EInfo, "Preparing");
+
         Scene *scene = static_cast<Scene *>(getResource("scene"));
         m_origSampler = static_cast<PSSMLTSampler *>(getResource("sampler"));
         m_sensor = static_cast<Sensor *>(getResource("sensor"));
@@ -83,9 +89,15 @@ public:
         m_pathSampler = new PathSampler(m_config.technique, m_scene,
             m_emitterSampler, m_sensorSampler, m_directSampler, m_config.maxDepth,
             m_config.rrDepth, m_config.separateDirect, m_config.directSampling);
+
+        Log(EInfo, "Prepartion Done");
+        
     }
 
     void process(const WorkUnit *workUnit, WorkResult *workResult, const bool &stop) {
+
+        Log(EInfo, "Processing");
+
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
         const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
         const PathSeed &seed = wu->getSeed();
@@ -126,6 +138,8 @@ public:
                 / seed.luminance) > Epsilon)
             Log(EError, "Error when reconstructing a seed path: luminance "
                 "= %f, but expected luminance = %f", current->luminance, seed.luminance);
+
+        Log(EInfo, "Setup of mlt done");
 
         ref<Timer> timer = new Timer();
 
@@ -183,6 +197,8 @@ public:
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
                     Spectrum value = current->getValue(k) * cumulativeWeight;
+                    Log(EInfo, value.toString().c_str());
+
                     if (!value.isZero())
                         result->put(current->getPosition(k), &value[0]);
                 }
@@ -205,6 +221,7 @@ public:
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k) * proposedWeight;
+                    Log(EInfo, value.toString().c_str());
                     if (!value.isZero())
                         result->put(proposed->getPosition(k), &value[0]);
                 }
@@ -223,6 +240,7 @@ public:
         /* Perform the last splat */
         for (size_t k=0; k<current->size(); ++k) {
             Spectrum value = current->getValue(k) * cumulativeWeight;
+             Log(EInfo, value.toString().c_str());
             if (!value.isZero())
                 result->put(current->getPosition(k), &value[0]);
         }

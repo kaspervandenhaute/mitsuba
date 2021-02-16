@@ -63,7 +63,7 @@ public:
      */
     virtual void renderBlock(const Scene *scene, const Sensor *sensor,
         Sampler *sampler, ImageBlock *block, const bool &stop,
-        const std::vector< TPoint2<uint8_t> > &points) const;
+        const std::vector< TPoint2<uint8_t> > &points);
 
     /**
      * <tt>NetworkedObject</tt> implementation:

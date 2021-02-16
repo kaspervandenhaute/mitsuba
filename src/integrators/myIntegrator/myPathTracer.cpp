@@ -100,7 +100,7 @@ bool MyPathTracer::render(Scene *scene,
 
     // m_config.nMutations = (cropSize.x * cropSize.y * sampleCount) / m_config.workUnits;
 
-
+    m_config.nMutations = 1000;
 
     ref<ReplayableSampler> rplSampler = new ReplayableSampler();
 
@@ -139,7 +139,8 @@ bool MyPathTracer::render(Scene *scene,
         }
         //TODO: this scales the luminance of mlt; Should be done for individual samples.
         m_config.luminance = avgLuminance / (sampler->getSampleCount() * cropSize.x * cropSize.y);
-        m_config.nMutations = pathSeeds.size();
+
+        m_config.workUnits = pathSeeds.size();
      
         Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", pathSeeds.size(), avgLuminance);
 
@@ -183,17 +184,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
         const bool &stop, const std::vector< TPoint2<uint8_t> > &points) {
 
-    // Float diffScaleFactor = 1.0f /
-    //     std::sqrt((Float) sampler->getSampleCount());
-
-    // bool needsApertureSample = sensor->needsApertureSample();
-    // bool needsTimeSample = sensor->needsTimeSample();
-
-    // RadianceQueryRecord rRec(scene, sampler);
-    // Point2 apertureSample(0.5f);
-    // Float timeSample = 0.5f;
-    // RayDifferential sensorRay;
-
 // TODO: read parameters
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
@@ -201,11 +191,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
             m_config.separateDirect, m_config.directSampling);
 
     block->clear();
-
-    // uint32_t queryType = RadianceQueryRecord::ESensorRay;
-
-    // if (!sensor->getFilm()->hasAlpha()) /* Don't compute an alpha channel if we don't have to */
-    //     queryType &= ~RadianceQueryRecord::EOpacity;
 
     for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
@@ -217,18 +202,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
         // TODO: get sample count (not from rplSampler)
         // for (size_t j = 0; j<sampler->getSampleCount(); j++) {
         for (size_t j = 0; j<1; j++) {
-            // rRec.newQuery(queryType, sensor->getMedium());
-            // Point2 samplePos(Point2(offset) + Vector2(rRec.nextSample2D()));
-
-            // if (needsApertureSample)
-            //     apertureSample = rRec.nextSample2D();
-            // if (needsTimeSample)
-            //     timeSample = rRec.nextSample1D();
-
-            // Spectrum spec = sensor->sampleRayDifferential(
-            //     sensorRay, samplePos, apertureSample, timeSample);
-
-            // sensorRay.scaleDifferential(diffScaleFactor);
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
@@ -240,11 +213,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
             // spec *= Spectrum(0.5);
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 0) {
+            if (luminance > 1.5) {
                 pathSeeds.emplace_back(index, luminance);
+            } else {
+                block->put(position, spec, 1);
             }
 
-            // block->put(position, spec, 1);
             sampler->advance();
         }
     }

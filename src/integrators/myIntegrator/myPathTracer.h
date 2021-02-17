@@ -3,6 +3,7 @@
 #include <mitsuba/render/integrator.h>
 
 #include "../pssmlt/pssmlt.h"
+#include "my_pathSeed.h"
 
 
 #ifndef MY_PATH_TRACER
@@ -97,7 +98,8 @@ protected:
     /// Used to temporarily cache a parallel process while it is in operation
     ref<ParallelProcess> m_process;
     PSSMLTConfiguration m_config;
-    std::vector<PathSeed> pathSeeds;
+    std::vector<PositionedPathSeed> pathSeeds;
+    int sampleCount;
 };
 
 MTS_NAMESPACE_END

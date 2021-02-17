@@ -45,6 +45,7 @@ private:
     int m_borderSize;
     bool m_warnInvalid;
     HilbertCurve2D<uint8_t> m_hilbertCurve;
+    
 };
 
 MTS_NAMESPACE_END

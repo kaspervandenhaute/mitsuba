@@ -18,8 +18,9 @@
 
 #include <mitsuba/bidir/util.h>
 #include <mitsuba/bidir/path.h>
-#include "pssmlt_proc.h"
-#include "pssmlt_sampler.h"
+#include "my_pssmlt_proc.h"
+#include "../pssmlt/pssmlt_sampler.h"
+#include "my_pathSeed.h"
 
 #include <string>
 
@@ -99,8 +100,8 @@ public:
         // Log(EInfo, "Processing");
 
         ImageBlock *result = static_cast<ImageBlock *>(workResult);
-        const SeedWorkUnit *wu = static_cast<const SeedWorkUnit *>(workUnit);
-        const PathSeed &seed = wu->getSeed();
+        const PositionedSeedWorkUnit *wu = static_cast<const PositionedSeedWorkUnit*>(workUnit);
+        const PositionedPathSeed &seed = wu->getSeed();
         SplatList *current = new SplatList(), *proposed = new SplatList();
 
         // Log(EInfo, "rplSamplerIndex: %i", m_rplSampler->getSampleIndex());
@@ -117,7 +118,7 @@ public:
            back to this worker's own source of random numbers */
         m_rplSampler->setSampleIndex(seed.sampleIndex);
 
-        m_pathSampler->sampleSplats(Point2i(-1), *current);
+        m_pathSampler->sampleSplats(seed.position, *current);
         result->clear();
 
         ref<Random> random = m_origSampler->getRandom();
@@ -274,7 +275,7 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const PSSMLTConfiguration &conf, const Bitmap *directImage,
-    const std::vector<PathSeed> &seeds) : m_job(parent), m_queue(queue),
+    const std::vector<PositionedPathSeed> &seeds) : m_job(parent), m_queue(queue),
         m_config(conf), m_progress(NULL), m_seeds(seeds) {
     m_directImage = directImage;
     m_timeoutTimer = new Timer();
@@ -350,7 +351,7 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
     if (m_workCounter >= m_config.workUnits || timeout < 0)
         return EFailure;
 
-    SeedWorkUnit *workUnit = static_cast<SeedWorkUnit *>(unit);
+    PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
     workUnit->setSeed(m_seeds[m_workCounter++]);
     workUnit->setTimeout(timeout);
     return ESuccess;

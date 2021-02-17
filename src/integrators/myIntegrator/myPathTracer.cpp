@@ -8,7 +8,7 @@
 #include "myrenderproc.h"
 
 #include "../pssmlt/pssmlt_sampler.h"
-#include "../pssmlt/pssmlt_proc.h"
+#include "my_pssmlt_proc.h"
 
 #include <mitsuba/bidir/pathsampler.h>
 #include <mitsuba/bidir/rsampler.h>
@@ -62,7 +62,7 @@ bool MyPathTracer::render(Scene *scene,
 
     size_t nCores = sched->getCoreCount();
     const Sampler *sampler = static_cast<const Sampler *>(sched->getResource(samplerResID, 0));
-    size_t sampleCount = sampler->getSampleCount();
+    sampleCount = sampler->getSampleCount();
 
     auto cropSize = film->getCropSize();
 
@@ -184,7 +184,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
         const bool &stop, const std::vector< TPoint2<uint8_t> > &points) {
 
-// TODO: read parameters
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
@@ -199,22 +198,21 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
         sampler->generate(offset);
 
-        // TODO: get sample count (not from rplSampler)
         // for (size_t j = 0; j<sampler->getSampleCount(); j++) {
-        for (size_t j = 0; j<1; j++) {
+        for (size_t j = 0; j<sampleCount; j++) {
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
-            pathSampler->sampleSplats(Point2i(-1), splatList);
+            // pathSampler->sampleSplats(Point2i(-1), splatList);
+            pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
             auto position = splatList.splats[0].first;
             auto luminance = splatList.luminance;
-            // spec *= Spectrum(0.5);
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 1.5) {
-                pathSeeds.emplace_back(index, luminance);
+            if (luminance > 10) {
+                pathSeeds.emplace_back(offset, index, luminance);
             } else {
                 block->put(position, spec, 1);
             }

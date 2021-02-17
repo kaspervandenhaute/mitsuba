@@ -322,7 +322,7 @@ void PSSMLTProcess::develop() {
             value += direct[i];
         target[i] = value;
     }
-    m_film->setBitmap(m_developBuffer);
+    m_film->addBitmap(m_developBuffer);
     m_refreshTimer->reset();
 
     m_queue->signalRefresh(m_job);

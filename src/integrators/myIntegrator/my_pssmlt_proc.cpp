@@ -19,7 +19,7 @@
 #include <mitsuba/bidir/util.h>
 #include <mitsuba/bidir/path.h>
 #include "my_pssmlt_proc.h"
-#include "../pssmlt/pssmlt_sampler.h"
+#include "MutatablePssmltSampler.h"
 #include "my_pathSeed.h"
 
 #include <string>
@@ -68,8 +68,8 @@ public:
 
         Log(EInfo, "Preparing");
 
-        Scene *scene = static_cast<Scene *>(getResource("scene"));
-        m_origSampler = static_cast<PSSMLTSampler *>(getResource("sampler"));
+        Scene *scene = static_cast<Scene*>(getResource("scene"));
+        m_origSampler = static_cast<MutatablePSSMLTSampler*>(getResource("sampler"));
         m_sensor = static_cast<Sensor *>(getResource("sensor"));
         m_scene = new Scene(scene);
         m_film = m_sensor->getFilm();
@@ -83,9 +83,9 @@ public:
 
         m_rplSampler = static_cast<ReplayableSampler*>(
             static_cast<Sampler *>(getResource("rplSampler"))->clone().get());
-        m_sensorSampler = new PSSMLTSampler(m_origSampler);
-        m_emitterSampler = new PSSMLTSampler(m_origSampler);
-        m_directSampler = new PSSMLTSampler(m_origSampler);
+        m_sensorSampler = new MutatablePSSMLTSampler(m_origSampler);
+        m_emitterSampler = new MutatablePSSMLTSampler(m_origSampler);
+        m_directSampler = new MutatablePSSMLTSampler(m_origSampler);
 
         m_pathSampler = new PathSampler(m_config.technique, m_scene,
             m_emitterSampler, m_sensorSampler, m_directSampler, m_config.maxDepth,
@@ -113,12 +113,21 @@ public:
         m_emitterSampler->setRandom(m_rplSampler->getRandom());
         m_directSampler->setRandom(m_rplSampler->getRandom());
 
+        // Setting the sensor samples manual
+        // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
+        // m_sensorSampler->setPrimarySample(0, seed.position.x);
+        // m_sensorSampler->setPrimarySample(1, seed.position.y);
+        m_sensorSampler->setPrimarySample(0, 0);
+        m_sensorSampler->setPrimarySample(1, 0);
+
+        std::cout << m_sensorSampler.toString() << std::endl;
+
         /* Generate the initial sample by replaying the seeding random
            number stream at the appropriate position. Afterwards, revert
            back to this worker's own source of random numbers */
-        m_rplSampler->setSampleIndex(seed.sampleIndex);
+        m_rplSampler->setSampleIndex(seed.sampleIndex); // +2 Because of setting the sensor samples manual.
 
-        m_pathSampler->sampleSplats(seed.position, *current);
+        m_pathSampler->sampleSplats(Point2i(-1), *current);
         result->clear();
 
         ref<Random> random = m_origSampler->getRandom();
@@ -142,6 +151,10 @@ public:
             Log(EError, "Error when reconstructing a seed path (%i): luminance "
                 "= %f, but expected luminance = %f", seed.sampleIndex, current->luminance, seed.luminance);
 
+        m_sensorSampler->setLargeStep(false);
+        m_emitterSampler->setLargeStep(false);
+        m_directSampler->setLargeStep(false);
+
         // Log(EInfo, "Setup of mlt done");
 
         ref<Timer> timer = new Timer();
@@ -153,11 +166,6 @@ public:
             if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
                     && (int) timer->getMilliseconds() > wu->getTimeout())
                 break;
-
-            bool largeStep = random->nextFloat() < m_config.pLarge;
-            m_sensorSampler->setLargeStep(largeStep);
-            m_emitterSampler->setLargeStep(largeStep);
-            m_directSampler->setLargeStep(largeStep);
 
             m_pathSampler->sampleSplats(Point2i(-1), *proposed);
             proposed->normalize(m_config.importanceMap);
@@ -174,11 +182,11 @@ public:
             Float currentWeight, proposedWeight;
 
             if (a > 0) {
-                if (m_config.kelemenStyleWeights && !m_config.importanceMap) {
+                if (m_config.kelemenStyleWeights) {
                     /* Kelemen-style MLT weights (these don't work for 2-stage MLT) */
                     currentWeight = (1 - a) * current->luminance
                         / (current->luminance/m_config.luminance + m_config.pLarge);
-                    proposedWeight = (a + (largeStep ? 1 : 0)) * proposed->luminance
+                    proposedWeight = a * proposed->luminance
                         / (proposed->luminance/m_config.luminance + m_config.pLarge);
                 } else {
                     /* Veach-style use of expectations */
@@ -211,15 +219,13 @@ public:
                 m_sensorSampler->accept();
                 m_emitterSampler->accept();
                 m_directSampler->accept();
-                if (largeStep) {
-                    largeStepRatio.incrementBase(1);
-                    ++largeStepRatio;
-                } else {
-                    smallStepRatio.incrementBase(1);
-                    ++smallStepRatio;
-                }
+               
+                smallStepRatio.incrementBase(1);
+                ++smallStepRatio;
+                
                 acceptanceRate.incrementBase(1);
                 ++acceptanceRate;
+
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k) * proposedWeight;
@@ -232,10 +238,7 @@ public:
                 m_emitterSampler->reject();
                 m_directSampler->reject();
                 acceptanceRate.incrementBase(1);
-                if (largeStep)
-                    largeStepRatio.incrementBase(1);
-                else
-                    smallStepRatio.incrementBase(1);
+                smallStepRatio.incrementBase(1);
             }
         }
 
@@ -262,10 +265,10 @@ private:
     ref<Sensor> m_sensor;
     ref<Film> m_film;
     ref<PathSampler> m_pathSampler;
-    ref<PSSMLTSampler> m_origSampler;
-    ref<PSSMLTSampler> m_sensorSampler;
-    ref<PSSMLTSampler> m_emitterSampler;
-    ref<PSSMLTSampler> m_directSampler;
+    ref<MutatablePSSMLTSampler> m_origSampler;
+    ref<MutatablePSSMLTSampler> m_sensorSampler;
+    ref<MutatablePSSMLTSampler> m_emitterSampler;
+    ref<MutatablePSSMLTSampler> m_directSampler;
     ref<ReplayableSampler> m_rplSampler;
 };
 
@@ -294,32 +297,20 @@ void PSSMLTProcess::develop() {
     LockGuard lock(m_resultMutex);
     size_t pixelCount = m_accum->getBitmap()->getPixelCount();
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
-    const Spectrum *direct = m_directImage != NULL ?
-        (Spectrum *) m_directImage->getData() : NULL;
-    const Float *importanceMap = m_config.importanceMap != NULL ?
-            m_config.importanceMap->getFloatData() : NULL;
     Spectrum *target = (Spectrum *) m_developBuffer->getData();
 
     /* Compute the luminance correction factor */
     Float avgLuminance = 0;
-    if (importanceMap) {
-        for (size_t i=0; i<pixelCount; ++i)
-            avgLuminance += accum[i].getLuminance() * importanceMap[i];
-    } else {
-        for (size_t i=0; i<pixelCount; ++i)
-            avgLuminance += accum[i].getLuminance();
-    }
+   
+    for (size_t i=0; i<pixelCount; ++i)
+        avgLuminance += accum[i].getLuminance();
 
     avgLuminance /= (Float) pixelCount;
     Float luminanceFactor = m_config.luminance / avgLuminance;
 
     for (size_t i=0; i<pixelCount; ++i) {
         Float correction = luminanceFactor;
-        if (importanceMap)
-            correction *= importanceMap[i];
         Spectrum value = accum[i] * correction;
-        if (direct)
-            value += direct[i];
         target[i] = value;
     }
     m_film->addBitmap(m_developBuffer);

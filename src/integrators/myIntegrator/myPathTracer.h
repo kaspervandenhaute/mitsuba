@@ -99,7 +99,8 @@ protected:
     ref<ParallelProcess> m_process;
     PSSMLTConfiguration m_config;
     std::vector<PositionedPathSeed> pathSeeds;
-    int sampleCount;
+    size_t sampleCount;
+    Vector2 invSize;
 };
 
 MTS_NAMESPACE_END

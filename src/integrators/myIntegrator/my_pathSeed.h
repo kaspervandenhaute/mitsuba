@@ -9,15 +9,15 @@
 MTS_NAMESPACE_BEGIN
 
 struct PositionedPathSeed : public PathSeed {
-    Point2i position;
+    Point2 position;
 
-    inline PositionedPathSeed(Point2i position, size_t sampleIndex, Float luminance, int s = 0, int t = 0)
+    inline PositionedPathSeed(Point2 position, size_t sampleIndex, Float luminance, int s = 0, int t = 0)
         : PathSeed(sampleIndex, luminance, s, t), position(position) {}
 
     inline PositionedPathSeed(Stream *stream) : PathSeed(stream) {
         Float x = stream->readFloat();
         Float y = stream->readFloat();
-        position = Point2i(x,y);
+        position = Point2(x,y);
     }
 
     void serialize(Stream *stream) const {

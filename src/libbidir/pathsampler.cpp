@@ -284,8 +284,14 @@ void PathSampler::sampleSplats(const Point2i &offset, SplatList &list) {
                 const Vector2i cropSize = sensor->getFilm()->getCropSize();
                 Point2 samplePos = m_sensorSampler->next2D();
                 if (offset == Point2i(-1)) {
+                    std::cout << m_sensorSampler.toString() << std::endl;
+
+                    std::cout << samplePos.toString() << std::endl;
+
                     samplePos.x *= cropSize.x;
                     samplePos.y *= cropSize.y;
+                    std::cout << samplePos.toString() << std::endl;
+
                 } else {
                     samplePos.x += offset.x;
                     samplePos.y += offset.y;

@@ -7,7 +7,7 @@
 #include <mitsuba/core/plugin.h>
 #include "myrenderproc.h"
 
-#include "../pssmlt/pssmlt_sampler.h"
+#include "MutatablePssmltSampler.h"
 #include "my_pssmlt_proc.h"
 
 #include <mitsuba/bidir/pathsampler.h>
@@ -65,6 +65,13 @@ bool MyPathTracer::render(Scene *scene,
     sampleCount = sampler->getSampleCount();
 
     auto cropSize = film->getCropSize();
+    invSize = Vector2(1.f/cropSize.x, 1.f/cropSize.y);
+
+    if (sensor->needsApertureSample())
+        Log(EError, "No support for aperture samples at this time!");
+    if (sensor->needsTimeSample())
+        Log(EError, "No support for time samples at this time!");
+
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
         " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
@@ -87,7 +94,7 @@ bool MyPathTracer::render(Scene *scene,
     }
 
     /* Create a sampler instance for each worker */
-    ref<PSSMLTSampler> mltSampler = new PSSMLTSampler(m_config);
+    ref<MutatablePSSMLTSampler> mltSampler = new MutatablePSSMLTSampler(m_config);
     std::vector<SerializableObject *> mltSamplers(sched->getCoreCount());
     for (size_t i=0; i<mltSamplers.size(); ++i) {
         ref<Sampler> clonedSampler = mltSampler->clone();
@@ -189,9 +196,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
             m_config.separateDirect, m_config.directSampling);
 
+   
+
     block->clear();
 
-    for (size_t i = 0; i<points.size(); ++i) {
+    for (size_t i = 0; i<1; ++i) {
+    // for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
             break;
@@ -203,7 +213,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
-            // pathSampler->sampleSplats(Point2i(-1), splatList);
             pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
@@ -211,10 +220,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto luminance = splatList.luminance;
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 10) {
-                pathSeeds.emplace_back(offset, index, luminance);
+            if (luminance > 1 && pathSeeds.size() < 1) {
+                pathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
+                std::cout << position.toString() << std::endl;
             } else {
-                block->put(position, spec, 1);
+                // block->put(position, spec, 1);
             }
 
             sampler->advance();

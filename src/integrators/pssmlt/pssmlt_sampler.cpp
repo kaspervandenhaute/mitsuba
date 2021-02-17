@@ -81,6 +81,12 @@ void PSSMLTSampler::reject() {
 }
 
 Float PSSMLTSampler::primarySample(size_t i) {
+
+    for (auto& x : m_u) {
+        std::cout << x.value;
+    }
+    std::cout << std::endl;
+
     while (i >= m_u.size())
         m_u.push_back(SampleStruct(m_random->nextFloat()));
 

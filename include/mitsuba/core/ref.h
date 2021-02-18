@@ -119,9 +119,9 @@ public:
             return formatString("ref<%s>[null]",
                 T::m_theClass->getName().c_str());
         else
-            return formatString("ref<%s>[ref=%i, ptr=%s]",
+            return formatString("ref<%s>[ref=%i, ptr=%i, obj=%s]",
                     m_ptr->getClass()->getName().c_str(),
-                    m_ptr->getRefCount(), m_ptr->toString().c_str());
+                    m_ptr->getRefCount(), m_ptr, m_ptr->toString().c_str());
     }
 private:
     T *m_ptr;

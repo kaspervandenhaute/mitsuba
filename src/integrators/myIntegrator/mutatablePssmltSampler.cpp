@@ -12,6 +12,11 @@ void MutatablePSSMLTSampler::setPrimarySample(int index, Float value) {
         } else {
             m_u.emplace_back(value);
         }
+        
+        // for (auto& x : m_u) {
+        //     std::cout << x.value << "  ";
+        // }
+        // std::cout << std::endl;
     }
 
 MTS_IMPLEMENT_CLASS(MutatablePSSMLTSampler, false, PSSMLTSampler);

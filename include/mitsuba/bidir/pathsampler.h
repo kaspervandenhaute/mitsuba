@@ -188,6 +188,10 @@ public:
     /// Return the underlying memory pool
     inline MemoryPool &getMemoryPool() { return m_pool; }
 
+    inline Sampler* getSensorSampler() {
+        return m_sensorSampler;
+    } 
+
     MTS_DECLARE_CLASS()
 protected:
     /// Virtual destructor

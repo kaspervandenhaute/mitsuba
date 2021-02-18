@@ -200,8 +200,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
-    for (size_t i = 0; i<1; ++i) {
-    // for (size_t i = 0; i<points.size(); ++i) {
+    // for (size_t i = 0; i<1; ++i) {
+    for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
             break;
@@ -213,16 +213,17 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
-            pathSampler->sampleSplats(offset, splatList);
+            pathSampler->sampleSplats(Point2i(-1), splatList);
+            // pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
             auto position = splatList.splats[0].first;
             auto luminance = splatList.luminance;
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 1 && pathSeeds.size() < 1) {
+            if (luminance > 15 && pathSeeds.size() < 10) {
                 pathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
-                std::cout << position.toString() << std::endl;
+                Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
             } else {
                 // block->put(position, spec, 1);
             }

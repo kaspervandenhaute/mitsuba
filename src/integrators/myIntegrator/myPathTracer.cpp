@@ -107,7 +107,7 @@ bool MyPathTracer::render(Scene *scene,
 
     // m_config.nMutations = (cropSize.x * cropSize.y * sampleCount) / m_config.workUnits;
 
-    m_config.nMutations = 1000;
+    m_config.nMutations = 500;
 
     ref<ReplayableSampler> rplSampler = new ReplayableSampler();
 
@@ -213,7 +213,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
-            pathSampler->sampleSplats(Point2i(-1), splatList);
+            sampler->setSampleIndex(index);
+
+            pathSampler->sampleSplats(offset, splatList);
             // pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
@@ -221,11 +223,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto luminance = splatList.luminance;
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 15 && pathSeeds.size() < 10) {
+            if (luminance > 3) {
                 pathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
-                Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
+                // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
             } else {
-                // block->put(position, spec, 1);
+                block->put(position, spec, 1);
             }
 
             sampler->advance();

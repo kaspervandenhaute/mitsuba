@@ -113,25 +113,22 @@ public:
         m_emitterSampler->setRandom(m_rplSampler->getRandom());
         m_directSampler->setRandom(m_rplSampler->getRandom());
 
-        // Setting the sensor samples manual
-        // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
-        // m_sensorSampler->setPrimarySample(0, seed.position.x);
-        // m_sensorSampler->setPrimarySample(1, seed.position.y);
-
         /* Generate the initial sample by replaying the seeding random
            number stream at the appropriate position. Afterwards, revert
            back to this worker's own source of random numbers */
-        m_rplSampler->setSampleIndex(seed.sampleIndex); // +2); // +2 Because of setting the sensor samples manual.
+        m_rplSampler->setSampleIndex(seed.sampleIndex +2); // +2 Because of setting the sensor samples manual.
 
-        // ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(0, seed.position.x);
-        // ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(1, seed.position.y);
+        // Setting the sensor samples manual
+        // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
+        ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(0, seed.position.x);
+        ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(1, seed.position.y);
 
-        Log(EInfo, "position=[%f, %f]  index=%i", seed.position.x *200, seed.position.y *200, seed.sampleIndex);
-
-        // m_sensorSampler->setPrimarySample(0, 0);
-        // m_sensorSampler->setPrimarySample(1, 0);
+        // Log(EInfo, "position=[%f, %f]  index=%i", seed.position.x *200, seed.position.y *200, seed.sampleIndex);
 
         m_pathSampler->sampleSplats(Point2i(-1), *current);
+
+        m_rplSampler->setSampleIndex(seed.sampleIndex +2);
+
         result->clear();
 
         ref<Random> random = m_origSampler->getRandom();
@@ -141,7 +138,7 @@ public:
         m_rplSampler->updateSampleIndex(m_rplSampler->getSampleIndex()
             + m_sensorSampler->getSampleIndex()
             + m_emitterSampler->getSampleIndex()
-            + m_directSampler->getSampleIndex());
+            + m_directSampler->getSampleIndex() -2);
 
         m_sensorSampler->accept();
         m_emitterSampler->accept();
@@ -150,7 +147,7 @@ public:
         /* Sanity check -- the luminance should match the one from
            the warmup phase - an error here would indicate inconsistencies
            regarding the use of random numbers during sample generation */
-        if (std::abs((current->luminance - seed.luminance) / seed.luminance) > Epsilon) {
+        if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.0001) {
             Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                 "= %f, but expected luminance = %f", seed.sampleIndex, current->luminance, seed.luminance);
             return;

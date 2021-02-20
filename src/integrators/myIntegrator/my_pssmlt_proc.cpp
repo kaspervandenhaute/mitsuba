@@ -280,8 +280,8 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const PSSMLTConfiguration &conf, const Bitmap *directImage,
-    const std::vector<PositionedPathSeed> &seeds) : m_job(parent), m_queue(queue),
-        m_config(conf), m_progress(NULL), m_seeds(seeds) {
+    const std::vector<std::vector<PositionedPathSeed>> &seeds) : m_job(parent), m_queue(queue),
+        m_config(conf), m_progress(NULL), m_seeds(seeds), sublistIndex(0) {
     m_directImage = directImage;
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();
@@ -345,7 +345,15 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
         return EFailure;
 
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
-    workUnit->setSeed(m_seeds[m_workCounter++]);
+
+    while (m_seeds[sublistIndex].size() == seedIndex && sublistIndex < m_seeds.size()) {
+        ++sublistIndex;
+        seedIndex = 0;
+    }
+
+    workUnit->setSeed(m_seeds.at(sublistIndex).at(seedIndex++));
+    ++m_workCounter;
+
     workUnit->setTimeout(timeout);
     return ESuccess;
 }

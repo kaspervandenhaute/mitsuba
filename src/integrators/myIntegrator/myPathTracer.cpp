@@ -105,15 +105,24 @@ bool MyPathTracer::render(Scene *scene,
     for (size_t i=0; i<sched->getCoreCount(); ++i)
         mltSamplers[i]->decRef();
 
+    /* Create a sampler instance for each worker */
+    ref<ReplayableSampler> rplSampler = new ReplayableSampler();
+    std::vector<SerializableObject*> rplSamplers(sched->getCoreCount());
+    for (size_t i=0; i<rplSamplers.size(); ++i) {
+        ref<Sampler> clonedSampler = rplSampler->clone();
+        clonedSampler->incRef();
+        rplSamplers[i] = clonedSampler.get();
+    }
+    int rplSamplerResID = sched->registerMultiResource(rplSamplers);
+    for (size_t i=0; i<sched->getCoreCount(); ++i)
+        rplSamplers[i]->decRef();
+
     // m_config.nMutations = (cropSize.x * cropSize.y * sampleCount) / m_config.workUnits;
 
     m_config.nMutations = 500;
 
-    ref<ReplayableSampler> rplSampler = new ReplayableSampler();
-
 
     int integratorResID = sched->registerResource(this);
-    int rplSamplerResID = sched->registerResource(rplSampler);
 
     for (int iter=0; iter<1; ++iter) {
 
@@ -127,6 +136,7 @@ bool MyPathTracer::render(Scene *scene,
         proc->bindResource("scene", sceneResID);
         proc->bindResource("sensor", sensorResID);
         proc->bindResource("sampler", rplSamplerResID);
+        // proc->bindResource("sampler", samplerResID);
         scene->bindUsedResources(proc);
         bindUsedResources(proc);
         sched->schedule(proc);
@@ -140,16 +150,22 @@ bool MyPathTracer::render(Scene *scene,
             Log(EError, "Error while path tracing.");
         }
 
+
+        int nb_seeds = 0;
+
         Float avgLuminance = 0;
-        for (auto& seed : pathSeeds) {
-            avgLuminance += seed.luminance;
+        for (auto& sublist : pathSeeds) {
+            for (auto& seed : sublist) {
+                avgLuminance += seed.luminance;
+            }
+            nb_seeds += sublist.size();
         }
         //TODO: this scales the luminance of mlt; Should be done for individual samples.
         m_config.luminance = avgLuminance / (sampler->getSampleCount() * cropSize.x * cropSize.y);
 
-        m_config.workUnits = pathSeeds.size();
+        m_config.workUnits = nb_seeds;
      
-        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", pathSeeds.size(), avgLuminance);
+        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", nb_seeds, avgLuminance);
 
         ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
         process->bindResource("scene", sceneResID);
@@ -189,14 +205,14 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
 
 void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
-        const bool &stop, const std::vector< TPoint2<uint8_t> > &points) {
+        const bool &stop, const std::vector<TPoint2<uint8_t>> &points) {
 
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
             m_config.separateDirect, m_config.directSampling);
 
-   
+    std::vector<PositionedPathSeed> localPathSeeds;
 
     block->clear();
 
@@ -216,23 +232,23 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler->setSampleIndex(index);
 
             pathSampler->sampleSplats(offset, splatList);
-            // pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
             auto position = splatList.splats[0].first;
             auto luminance = splatList.luminance;
 
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 3) {
-                pathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
+            // if (luminance > 3) {
+            //     localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
                 // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
-            } else {
+            // } else {
                 block->put(position, spec, 1);
-            }
+            // }
 
             sampler->advance();
         }
     }
+    pathSeeds.push_back(localPathSeeds);
 }
 
 MTS_IMPLEMENT_CLASS(MyPathTracer, false, Integrator);

@@ -98,7 +98,7 @@ protected:
     /// Used to temporarily cache a parallel process while it is in operation
     ref<ParallelProcess> m_process;
     PSSMLTConfiguration m_config;
-    std::vector<PositionedPathSeed> pathSeeds;
+    std::vector<std::vector<PositionedPathSeed>> pathSeeds;
     size_t sampleCount;
     Vector2 invSize;
 };

@@ -52,7 +52,7 @@ void MyBlockRenderer::prepare() {
 
 void MyBlockRenderer::process(const WorkUnit *workUnit, WorkResult *workResult,
     const bool &stop) {
-    const RectangularWorkUnit *rect = static_cast<const RectangularWorkUnit *>(workUnit);
+    const RectangularWorkUnit *rect = static_cast<const RectangularWorkUnit*>(workUnit);
     ImageBlock *block = static_cast<ImageBlock *>(workResult);
 
 #ifdef MTS_DEBUG_FP

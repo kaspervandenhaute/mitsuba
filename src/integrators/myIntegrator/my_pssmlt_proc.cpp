@@ -127,8 +127,6 @@ public:
 
         m_pathSampler->sampleSplats(Point2i(-1), *current);
 
-        m_rplSampler->setSampleIndex(seed.sampleIndex +2);
-
         result->clear();
 
         ref<Random> random = m_origSampler->getRandom();
@@ -138,7 +136,7 @@ public:
         m_rplSampler->updateSampleIndex(m_rplSampler->getSampleIndex()
             + m_sensorSampler->getSampleIndex()
             + m_emitterSampler->getSampleIndex()
-            + m_directSampler->getSampleIndex() -2);
+            + m_directSampler->getSampleIndex() -2); // -2 because of setting the first two manualy there have been used less from rplSampler
 
         m_sensorSampler->accept();
         m_emitterSampler->accept();
@@ -281,7 +279,7 @@ private:
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const PSSMLTConfiguration &conf, const Bitmap *directImage,
     const std::vector<std::vector<PositionedPathSeed>> &seeds) : m_job(parent), m_queue(queue),
-        m_config(conf), m_progress(NULL), m_seeds(seeds), sublistIndex(0) {
+        m_config(conf), m_progress(NULL), m_seeds(seeds), sublistIndex(0), seedIndex(0) {
     m_directImage = directImage;
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();
@@ -346,10 +344,13 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
 
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
 
-    while (m_seeds[sublistIndex].size() == seedIndex && sublistIndex < m_seeds.size()) {
+    while (m_seeds[sublistIndex].size() == seedIndex) {
         ++sublistIndex;
         seedIndex = 0;
     }
+    assert(sublistIndex < m_seeds.size());
+
+    // Log(EInfo, "sublist: %i out of %i,  seed: %i", sublistIndex, m_seeds.size(), seedIndex);
 
     workUnit->setSeed(m_seeds.at(sublistIndex).at(seedIndex++));
     ++m_workCounter;

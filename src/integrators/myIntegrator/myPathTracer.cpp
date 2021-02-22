@@ -124,7 +124,7 @@ bool MyPathTracer::render(Scene *scene,
 
     int integratorResID = sched->registerResource(this);
 
-    for (int iter=0; iter<1; ++iter) {
+    for (int iter=0; iter<10; ++iter) {
 
         Log(EInfo, "Starting on path tracing in iteration %i", iter);
 
@@ -165,7 +165,7 @@ bool MyPathTracer::render(Scene *scene,
 
         m_config.workUnits = nb_seeds;
      
-        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", nb_seeds, avgLuminance);
+        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", nb_seeds, avgLuminance/nb_seeds);
 
         ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
         process->bindResource("scene", sceneResID);
@@ -237,18 +237,20 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto position = splatList.splats[0].first;
             auto luminance = splatList.luminance;
 
-            // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            // if (luminance > 3) {
-            //     localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
+            // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
+            if (luminance > 10) {
+                localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
                 // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
-            // } else {
+            } else {
                 block->put(position, spec, 1);
-            // }
+            }
 
             sampler->advance();
         }
     }
-    pathSeeds.push_back(localPathSeeds);
+    if (!localPathSeeds.empty()) {
+        pathSeeds.push_back(localPathSeeds);
+    }
 }
 
 MTS_IMPLEMENT_CLASS(MyPathTracer, false, Integrator);

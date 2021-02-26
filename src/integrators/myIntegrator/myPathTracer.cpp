@@ -13,6 +13,7 @@
 #include <mitsuba/bidir/pathsampler.h>
 #include <mitsuba/bidir/rsampler.h>
 
+
 MTS_NAMESPACE_BEGIN
 
 MyPathTracer::MyPathTracer(const Properties &props)
@@ -39,10 +40,15 @@ MyPathTracer::MyPathTracer(const Properties &props)
         m_config.workUnits = props.getInteger("workUnits", -1);
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
+
+        seedMutex = new Mutex();
   }
 
 MyPathTracer::MyPathTracer(Stream *stream, InstanceManager *manager)
- : Integrator(stream, manager) { }
+ : Integrator(stream, manager) { 
+        seedMutex = new Mutex();
+
+  }
 
 void MyPathTracer::serialize(Stream *stream, InstanceManager *manager) const {
     Integrator::serialize(stream, manager);
@@ -62,36 +68,29 @@ bool MyPathTracer::render(Scene *scene,
 
     size_t nCores = sched->getCoreCount();
     const Sampler *sampler = static_cast<const Sampler *>(sched->getResource(samplerResID, 0));
-    sampleCount = sampler->getSampleCount();
 
     auto cropSize = film->getCropSize();
     invSize = Vector2(1.f/cropSize.x, 1.f/cropSize.y);
+
+    samplesPerPixel = sampler->getSampleCount();
+    samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
+
+    
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
         " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
-        sampleCount, sampleCount == 1 ? "sample" : "samples", nCores,
+        samplesPerPixel, samplesPerPixel == 1 ? "sample" : "samples", nCores,
         nCores == 1 ? "core" : "cores");
 
-    // MLT setup with rplSampler and stuff
-
     ref<Bitmap> directImage;
-
-    size_t desiredMutationsPerWorkUnit =
-            m_config.technique == PathSampler::EBidirectional ? 1000 : 2000;
-
-    if (m_config.workUnits <= 0) {
-        const size_t cropArea  = (size_t) cropSize.x * cropSize.y;
-        const size_t workUnits = ((desiredMutationsPerWorkUnit - 1) +
-            (cropArea * sampleCount)) / desiredMutationsPerWorkUnit;
-        Assert(workUnits <= (size_t) std::numeric_limits<int>::max());
-        m_config.workUnits = (int) std::max(workUnits, (size_t) 1);
-    }
 
     /* Create a sampler instance for each worker */
     ref<MutatablePSSMLTSampler> mltSampler = new MutatablePSSMLTSampler(m_config);
@@ -124,9 +123,11 @@ bool MyPathTracer::render(Scene *scene,
 
     int integratorResID = sched->registerResource(this);
 
-    for (int iter=0; iter<10; ++iter) {
+    for (iteration=0; iteration<4; ++iteration) {
 
-        Log(EInfo, "Starting on path tracing in iteration %i", iter);
+        Log(EInfo, "Starting on path tracing in iteration %i", iteration);
+
+        detector->startIteration();
 
         /* This is a sampling-based integrator - parallelize */
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
@@ -150,43 +151,47 @@ bool MyPathTracer::render(Scene *scene,
             Log(EError, "Error while path tracing.");
         }
 
+        if (iteration != 0) {
+            size_t nb_seeds = 0;
 
-        int nb_seeds = 0;
+            Float avgLuminance = 0;
 
-        Float avgLuminance = 0;
-        for (auto& sublist : pathSeeds) {
-            for (auto& seed : sublist) {
-                avgLuminance += seed.luminance;
+            for (auto& sublist : pathSeeds) {
+                for (auto& seed : sublist) {
+                    avgLuminance += seed.luminance;
+                }
+                nb_seeds += sublist.size();
             }
-            nb_seeds += sublist.size();
-        }
-        //TODO: this scales the luminance of mlt; Should be done for individual samples.
-        m_config.luminance = avgLuminance / (sampler->getSampleCount() * cropSize.x * cropSize.y);
+            //TODO: this scales the luminance of mlt; Should be done for individual samples.
+            m_config.luminance = avgLuminance / samplesTotal;
 
-        m_config.workUnits = nb_seeds;
-     
-        Log(EInfo, "Starting on mlt in iteration with %i seeds. Avg luminance is %f.", nb_seeds, avgLuminance/nb_seeds);
+            auto mltBudget = computeMltBudget();
 
-        ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
-        process->bindResource("scene", sceneResID);
-        process->bindResource("sensor", sensorResID);
-        process->bindResource("sampler", mltSamplerResID);
-        process->bindResource("rplSampler", rplSamplerResID);
-
-        Log(EInfo, "Binded resources");
-
-        m_process = process;
-        sched->schedule(process);
-        sched->wait(process);
-        m_process = NULL;
+            m_config.workUnits = std::min(mltBudget, nb_seeds); // TODO: selection of seeds
         
-        process->develop();
+            Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance/nb_seeds);
 
-        pathSeeds.clear();
+            ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
+            process->bindResource("scene", sceneResID);
+            process->bindResource("sensor", sensorResID);
+            process->bindResource("sampler", mltSamplerResID);
+            process->bindResource("rplSampler", rplSamplerResID);
 
-        if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
-            Log(EError, "Error while mlting.");
-        }    
+            Log(EInfo, "Binded resources");
+
+            m_process = process;
+            sched->schedule(process);
+            sched->wait(process);
+            m_process = NULL;
+            
+            process->develop();
+
+            pathSeeds.clear();
+
+            if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
+                Log(EError, "Error while mlting.");
+            }    
+        }
     }
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
@@ -203,6 +208,11 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
     /* Do nothing by default */
 }
 
+size_t MyPathTracer::computeMltBudget() const {
+    Float r = weightedAvg.get() / unweightedAvg.get();
+    return samplesTotal * r / (1-r);
+}
+
 void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
         const bool &stop, const std::vector<TPoint2<uint8_t>> &points) {
@@ -213,6 +223,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
             m_config.separateDirect, m_config.directSampling);
 
     std::vector<PositionedPathSeed> localPathSeeds;
+    size_t nb_seeds = 0;
 
     block->clear();
 
@@ -225,7 +236,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
         sampler->generate(offset);
 
         // for (size_t j = 0; j<sampler->getSampleCount(); j++) {
-        for (size_t j = 0; j<sampleCount; j++) {
+        for (size_t j = 0; j<samplesPerPixel; j++) {
 
             splatList.clear();
             auto index = sampler->getSampleIndex();
@@ -238,17 +249,31 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto luminance = splatList.luminance;
 
             // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-            if (luminance > 10) {
-                localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
-                // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
-            } else {
-                block->put(position, spec, 1);
+
+            detector->contribute(offset, luminance);
+            auto weight = detector->calculateWeight(offset, luminance, iteration*samplesPerPixel);
+
+            weightedAvg.put(weight*luminance);
+            unweightedAvg.put(luminance);
+
+
+            if (iteration != 0) {
+                block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
+
+                if (weight > 0) {
+                    // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
+                    localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
+                    // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
+                    nb_seeds++;
+                } 
             }
 
             sampler->advance();
         }
     }
+    assert(nb_seeds == localPathSeeds.size());
     if (!localPathSeeds.empty()) {
+        LockGuard lock(seedMutex);
         pathSeeds.push_back(localPathSeeds);
     }
 }

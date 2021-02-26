@@ -5,11 +5,34 @@
 #include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
 
+#include "outlierDetectors/bitterli.h"
+
 
 #ifndef MY_PATH_TRACER
 #define MY_PATH_TRACER
 
 MTS_NAMESPACE_BEGIN
+
+template<typename T>
+class RunningAverage {
+
+public: 
+    RunningAverage() : sum(0), count(0) {}
+
+    T get() const {
+        return sum / count;
+    }
+
+    void put(T val) {
+        sum += val;
+        ++count;
+    }
+
+private:
+    T sum;
+    size_t count;
+};
+
 
 class MyPathTracer : public Integrator {
 public:
@@ -66,6 +89,9 @@ public:
         Sampler *sampler, ImageBlock *block, const bool &stop,
         const std::vector< TPoint2<uint8_t> > &points);
 
+    
+    size_t computeMltBudget() const;
+
     /**
      * <tt>NetworkedObject</tt> implementation:
      * When a parallel rendering process starts, the integrator is
@@ -99,8 +125,12 @@ protected:
     ref<ParallelProcess> m_process;
     PSSMLTConfiguration m_config;
     std::vector<std::vector<PositionedPathSeed>> pathSeeds;
-    size_t sampleCount;
+    size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
+    ref<OutlierDetectorBitterly> detector;
+    int iteration;
+    RunningAverage<Float> unweightedAvg, weightedAvg;
+    ref<Mutex> seedMutex;
 };
 
 MTS_NAMESPACE_END

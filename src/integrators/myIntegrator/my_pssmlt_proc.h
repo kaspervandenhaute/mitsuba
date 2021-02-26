@@ -66,6 +66,7 @@ private:
     ref<Timer> m_timeoutTimer, m_refreshTimer;
     size_t sublistIndex;
     size_t seedIndex;
+    int nb_seeds;
 };
 
 MTS_NAMESPACE_END

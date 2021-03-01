@@ -194,8 +194,13 @@ bool MyPathTracer::render(Scene *scene,
                     index -= sublist.size();
                 }
             }
+
+            pathSeeds.clear();
+
             Log(EInfo, "Seeds size: %i,  workUnits: %i", seeds.size(), m_config.workUnits);
             assert(seeds.size() == (size_t) m_config.workUnits);
+
+            m_config.luminance = avgLuminance / nb_seeds;
         
             Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance/nb_seeds);
 
@@ -214,7 +219,6 @@ bool MyPathTracer::render(Scene *scene,
             
             process->develop();
 
-            pathSeeds.clear();
 
             if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
                 Log(EError, "Error while mlting.");
@@ -224,7 +228,7 @@ bool MyPathTracer::render(Scene *scene,
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
-    Properties props("ldrfilm");
+    Properties props("hdrfilm");
     props.setInteger("width", cropSize.x);
     props.setInteger("height", cropSize.y);
     props.setInteger("cropWidth", cropSize.x);

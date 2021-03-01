@@ -160,6 +160,9 @@ public:
 
         // Log(EInfo, "Setup of mlt done");
 
+        // Luminance correction
+        auto correction = seed.luminance / seed.pdf;
+
         ref<Timer> timer = new Timer();
 
         /* MLT main loop */
@@ -207,7 +210,7 @@ public:
                     Spectrum value = current->getValue(k) * cumulativeWeight; // See formula 9 in selectively mlt
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= seed.luminance / (seed.pdf * value.getLuminance());
+                        value *= correction;// / value.getLuminance();
                         result->put(current->getPosition(k), &value[0]);
                     }
                 }
@@ -230,7 +233,7 @@ public:
                     Spectrum value = proposed->getValue(k) * proposedWeight;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= seed.luminance / (seed.pdf * value.getLuminance());
+                        value *= correction;// / value.getLuminance();
                         result->put(proposed->getPosition(k), &value[0]);
                     }
                 }
@@ -249,7 +252,7 @@ public:
             Spectrum value = current->getValue(k) * cumulativeWeight;
             if (!value.isZero()) {
                 // Log(EInfo, value.toString().c_str());
-                value *= seed.luminance / (seed.pdf * value.getLuminance());
+                value *= correction;// / value.getLuminance();
                 result->put(current->getPosition(k), &value[0]);
             }
         }
@@ -302,6 +305,23 @@ void PSSMLTProcess::develop() {
     size_t pixelCount = m_accum->getBitmap()->getPixelCount();
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
     Spectrum *target = (Spectrum *) m_developBuffer->getData();
+
+/* Compute the luminance correction factor */
+    // Float avgLuminance = 0;
+   
+    // for (size_t i=0; i<pixelCount; ++i)
+    //     avgLuminance += accum[i].getLuminance();
+
+    // avgLuminance /= (Float) pixelCount;
+    // Float luminanceFactor = m_config.luminance / avgLuminance;
+
+    // for (size_t i=0; i<pixelCount; ++i) {
+    //     Float correction = luminanceFactor;
+    //     Spectrum value = accum[i] * correction;
+    //     target[i] = value;
+    // }
+
+
     // TODO: can be skipped?
     for (size_t i=0; i<pixelCount; ++i) {
         target[i] = accum[i];

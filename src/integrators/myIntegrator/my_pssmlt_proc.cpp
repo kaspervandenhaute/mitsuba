@@ -21,6 +21,7 @@
 #include "my_pssmlt_proc.h"
 #include "MutatablePssmltSampler.h"
 #include "my_pathSeed.h"
+#include "myPathTracer.h"
 
 #include <string>
 
@@ -89,7 +90,7 @@ public:
 
         m_pathSampler = new PathSampler(m_config.technique, m_scene,
             m_emitterSampler, m_sensorSampler, m_directSampler, m_config.maxDepth,
-            m_config.rrDepth, m_config.separateDirect, m_config.directSampling);
+            m_config.rrDepth, false, false);
 
         // Log(EInfo, "Prepartion Done");
         
@@ -162,8 +163,7 @@ public:
         ref<Timer> timer = new Timer();
 
         /* MLT main loop */
-        Float currentWeight, proposedWeight; //TODO: check with pbrt implementation
-
+        Float cumulativeWeight = 0;
         current->normalize(m_config.importanceMap);
         for (uint64_t mutationCtr=0; mutationCtr<m_config.nMutations && !stop; ++mutationCtr) {
             // if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
@@ -182,12 +182,14 @@ public:
             }
 
             bool accept;
+            Float currentWeight, proposedWeight;
+
 
             if (a > 0) {
                 
                 //TODO: look into kelemen style weights
-                currentWeight = a;
-                proposedWeight = 1-a;
+                currentWeight = 1-a;
+                proposedWeight = a;
                 
                 accept = (a == 1) || (random->nextFloat() < a);
 
@@ -198,20 +200,19 @@ public:
                 accept = false;
             }
 
-
+            cumulativeWeight += currentWeight;
 
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
-                    // TODO: currentweight correct?
-                    Spectrum value = current->getValue(k) * currentWeight; // See formula 9 in selectively mlt
+                    Spectrum value = current->getValue(k) * cumulativeWeight; // See formula 9 in selectively mlt
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= seed.luminance / (seed.pdf * current->luminance);
+                        value *= seed.luminance / (seed.pdf * value.getLuminance());
                         result->put(current->getPosition(k), &value[0]);
                     }
                 }
 
-        
+                cumulativeWeight = proposedWeight;
                 std::swap(proposed, current);
 
                 m_sensorSampler->accept();
@@ -229,7 +230,7 @@ public:
                     Spectrum value = proposed->getValue(k) * proposedWeight;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= seed.luminance / (seed.pdf * current->luminance);
+                        value *= seed.luminance / (seed.pdf * value.getLuminance());
                         result->put(proposed->getPosition(k), &value[0]);
                     }
                 }
@@ -245,10 +246,10 @@ public:
         /* Perform the last splat */
         // TODO: check with pbrt, is currentWeight correct?
         for (size_t k=0; k<current->size(); ++k) {
-            Spectrum value = current->getValue(k) * currentWeight;
+            Spectrum value = current->getValue(k) * cumulativeWeight;
             if (!value.isZero()) {
                 // Log(EInfo, value.toString().c_str());
-                value *= seed.luminance / (seed.pdf * current->luminance);
+                value *= seed.luminance / (seed.pdf * value.getLuminance());
                 result->put(current->getPosition(k), &value[0]);
             }
         }
@@ -281,8 +282,8 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const PSSMLTConfiguration &conf, const Bitmap *directImage,
-    const std::vector<std::vector<PositionedPathSeed>> &seeds) : m_job(parent), m_queue(queue),
-        m_config(conf), m_progress(NULL), m_seeds(seeds), sublistIndex(0), seedIndex(0), nb_seeds(0) {
+    const std::vector<PositionedPathSeed> &seeds, size_t mltBudget, Bitmap* mltResult) : m_job(parent), m_queue(queue),
+        m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_budget(mltBudget), mlt_result(mltResult) {
     m_directImage = directImage;
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();
@@ -290,10 +291,6 @@ PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     m_resultCounter = 0;
     m_workCounter = 0;
     m_refreshTimeout = 1;
-
-    for (auto& sublist : seeds) {
-        nb_seeds += sublist.size();
-    }
 }
 
 ref<WorkProcessor> PSSMLTProcess::createWorkProcessor() const {
@@ -308,10 +305,13 @@ void PSSMLTProcess::develop() {
     // TODO: can be skipped?
     for (size_t i=0; i<pixelCount; ++i) {
         target[i] = accum[i];
+        // std::cout << (target[i] * (1.f/mlt_budget)).toString() << std::endl;
     }
-    m_film->addBitmap(m_developBuffer, 1/(m_config.nMutations));
-    m_refreshTimer->reset();
+    m_developBuffer->scale(1.f/mlt_budget);
+    mlt_result->accumulate(m_developBuffer);
+    // m_film->addBitmap(m_developBuffer, 1.f/mlt_budget);
 
+    m_refreshTimer->reset();
     m_queue->signalRefresh(m_job);
 }
 
@@ -330,33 +330,20 @@ void PSSMLTProcess::processResult(const WorkResult *wr, bool cancelled) {
 
 ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker) {
     int timeout = 0;
-    // if (m_config.timeout > 0) {
-    //     timeout = static_cast<int>(static_cast<int64_t>(m_config.timeout*1000) -
-    //               static_cast<int64_t>(m_timeoutTimer->getMilliseconds()));
-    // }
+    if (m_config.timeout > 0) {
+        timeout = static_cast<int>(static_cast<int64_t>(m_config.timeout*1000) -
+                  static_cast<int64_t>(m_timeoutTimer->getMilliseconds()));
+    }
 
-    if (m_workCounter >= m_config.workUnits)// || timeout < 0)
+    if (m_workCounter >= m_config.workUnits || timeout < 0)
         return EFailure;
 
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
 
-    while (m_seeds[sublistIndex].size() == seedIndex) {
-        ++sublistIndex;
-        seedIndex = 0;
-    }
-    assert(sublistIndex < m_seeds.size());
-
-    // Log(EInfo, "sublist: %i out of %i,  seed: %i", sublistIndex, m_seeds.size(), seedIndex);
-    auto seed = m_seeds.at(sublistIndex).at(seedIndex++);
-    // Log(EInfo, "setting seed pdf = %f", 1.f/nb_seeds);
-    seed.pdf = 1.f/nb_seeds; // TODO: choose proportional to luminance
-
-    // std::cout << seed.pdf << std::endl;
+    auto seed = m_seeds.at(m_workCounter++);
 
     workUnit->setSeed(seed);
-    ++m_workCounter;
-
-    // workUnit->setTimeout(timeout);
+    workUnit->setTimeout(timeout);
     return ESuccess;
 }
 

@@ -28,6 +28,7 @@
 
 MTS_NAMESPACE_BEGIN
 
+
 /* ==================================================================== */
 /*                           Parallel process                           */
 /* ==================================================================== */
@@ -36,7 +37,7 @@ class PSSMLTProcess : public ParallelProcess {
 public:
     PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
         const PSSMLTConfiguration &config, const Bitmap *directImage,
-        const std::vector<std::vector<PositionedPathSeed>> &seeds);
+        const std::vector<PositionedPathSeed> &seeds, size_t mlt_budget, Bitmap* mltResult);
 
     void develop();
 
@@ -58,15 +59,14 @@ private:
     ref<Bitmap> m_developBuffer;
     ImageBlock *m_accum;
     ProgressReporter *m_progress;
-    const std::vector<std::vector<PositionedPathSeed>> &m_seeds;
+    const std::vector<PositionedPathSeed> &m_seeds;
     ref<Mutex> m_resultMutex;
     ref<Film> m_film;
     int m_resultCounter, m_workCounter;
     unsigned int m_refreshTimeout;
     ref<Timer> m_timeoutTimer, m_refreshTimer;
-    size_t sublistIndex;
-    size_t seedIndex;
-    int nb_seeds;
+    size_t mlt_budget;
+    ref<Bitmap> mlt_result;
 };
 
 MTS_NAMESPACE_END

@@ -17,7 +17,7 @@
 MTS_NAMESPACE_BEGIN
 
 MyPathTracer::MyPathTracer(const Properties &props)
- : Integrator(props) {
+ : Integrator(props), totalMltBudget(0) {
         m_config.maxDepth = props.getInteger("maxDepth", -1);
         m_config.rrDepth = props.getInteger("rrDepth", 5);
         m_config.technique = props.getBoolean("bidirectional", false) ?
@@ -40,6 +40,8 @@ MyPathTracer::MyPathTracer(const Properties &props)
         m_config.workUnits = props.getInteger("workUnits", -1);
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
+
+        iterations = props.getInteger("iterations", 10);
 
         seedMutex = new Mutex();
   }
@@ -67,7 +69,7 @@ bool MyPathTracer::render(Scene *scene,
     ref<Film> film = sensor->getFilm();
 
     size_t nCores = sched->getCoreCount();
-    const Sampler *sampler = static_cast<const Sampler *>(sched->getResource(samplerResID, 0));
+    Sampler *sampler = static_cast<Sampler *>(sched->getResource(samplerResID, 0));
 
     auto cropSize = film->getCropSize();
     invSize = Vector2(1.f/cropSize.x, 1.f/cropSize.y);
@@ -75,7 +77,7 @@ bool MyPathTracer::render(Scene *scene,
     samplesPerPixel = sampler->getSampleCount();
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
-    
+    ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
@@ -123,7 +125,7 @@ bool MyPathTracer::render(Scene *scene,
 
     int integratorResID = sched->registerResource(this);
 
-    for (iteration=0; iteration<4; ++iteration) {
+    for (iteration=0; iteration<iterations; ++iteration) {
 
         Log(EInfo, "Starting on path tracing in iteration %i", iteration);
 
@@ -156,22 +158,48 @@ bool MyPathTracer::render(Scene *scene,
 
             Float avgLuminance = 0;
 
+            DiscreteDistribution seedDistribution(pathSeeds.size());
+
             for (auto& sublist : pathSeeds) {
                 for (auto& seed : sublist) {
                     avgLuminance += seed.luminance;
+                    seedDistribution.append(seed.luminance);
                 }
                 nb_seeds += sublist.size();
             }
-            //TODO: this scales the luminance of mlt; Should be done for individual samples.
-            m_config.luminance = avgLuminance / samplesTotal;
 
+            seedDistribution.normalize();
+
+            // mlt budget is nb chains * nb mutations
             auto mltBudget = computeMltBudget();
+            auto nbOfChains = mltBudget / m_config.nMutations;
+            m_config.workUnits = std::min(nbOfChains, nb_seeds); // TODO: selection of seeds
+            //TODO: mutation lenght of last chain needs to be shortened to exactly reach the budget
 
-            m_config.workUnits = std::min(mltBudget, nb_seeds); // TODO: selection of seeds
+            totalMltBudget += mltBudget;
+
+            std::vector<PositionedPathSeed> seeds;
+            seeds.reserve(m_config.workUnits);
+            for (int i=0; i<m_config.workUnits; ++i) {
+                Float pdf;
+                auto index = seedDistribution.sample(sampler->next1D(), pdf);
+
+                for (auto& sublist : pathSeeds) {
+                    if (sublist.size() > index) {
+                        auto seed = sublist[index];
+                        seed.pdf = pdf;
+                        seeds.push_back(seed);
+                        break;
+                    }
+                    index -= sublist.size();
+                }
+            }
+            Log(EInfo, "Seeds size: %i,  workUnits: %i", seeds.size(), m_config.workUnits);
+            assert(seeds.size() == (size_t) m_config.workUnits);
         
             Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance/nb_seeds);
 
-            ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, pathSeeds);
+            ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult);
             process->bindResource("scene", sceneResID);
             process->bindResource("sensor", sensorResID);
             process->bindResource("sampler", mltSamplerResID);
@@ -196,6 +224,23 @@ bool MyPathTracer::render(Scene *scene,
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
+    Properties props("ldrfilm");
+    props.setInteger("width", cropSize.x);
+    props.setInteger("height", cropSize.y);
+    props.setInteger("cropWidth", cropSize.x);
+    props.setInteger("cropHeight", cropSize.y);
+
+
+    ref<Film> mltFilm = static_cast<Film *> (PluginManager::getInstance()->createObject(MTS_CLASS(Film), props));
+
+    mltResult->scale(1.f/iterations);
+
+    film->addBitmap(mltResult);
+
+    mltFilm->setBitmap(mltResult);
+    mltFilm->setDestinationFile("/mnt/g/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png", 0);
+
+    mltFilm->develop(scene, 0);
     return true;
 }
 
@@ -220,7 +265,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
-            m_config.separateDirect, m_config.directSampling);
+            false, false, false);
 
     std::vector<PositionedPathSeed> localPathSeeds;
     size_t nb_seeds = 0;
@@ -271,9 +316,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler->advance();
         }
     }
-    assert(nb_seeds == localPathSeeds.size());
     if (!localPathSeeds.empty()) {
-        LockGuard lock(seedMutex);
+        LockGuard lock(seedMutex); // pathSeeds is global
         pathSeeds.push_back(localPathSeeds);
     }
 }

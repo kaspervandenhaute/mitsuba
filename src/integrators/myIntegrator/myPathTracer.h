@@ -1,6 +1,7 @@
 
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/integrator.h>
+#include <mitsuba/core/bitmap.h>
 
 #include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
@@ -131,6 +132,8 @@ protected:
     int iteration;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
+    int iterations;
+    size_t totalMltBudget;
 };
 
 MTS_NAMESPACE_END

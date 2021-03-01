@@ -1,3 +1,4 @@
+
 /*
     This file is part of Mitsuba, a physically based rendering system.
 

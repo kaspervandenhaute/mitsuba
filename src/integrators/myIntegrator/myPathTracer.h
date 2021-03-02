@@ -18,19 +18,20 @@ template<typename T>
 class RunningAverage {
 
 public: 
-    RunningAverage() : sum(0), count(0) {}
+    RunningAverage() : avg(0), count(0) {}
 
     T get() const {
-        return sum / count;
+        return avg;
     }
 
     void put(T val) {
-        sum += val;
+        avg = avg*count + val;
         ++count;
+        avg /= count;
     }
 
 private:
-    T sum;
+    T avg;
     size_t count;
 };
 
@@ -121,19 +122,40 @@ public:
 
     MTS_DECLARE_CLASS()
 
-protected:
+private:
+    /// Draw nChains samples from allSeeds proportional to their luminance. Samples can be chosen multiple times.
+    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed> const& allSeeds, size_t nChains, Sampler* sampler) {
+        
+        DiscreteDistribution seedDistribution(allSeeds.size());
+        for (auto& seed : allSeeds) {
+            seedDistribution.append(seed.luminance);        
+        }
+
+        seedDistribution.normalize();
+
+        std::vector<PositionedPathSeed> seeds;
+        seeds.reserve(nChains);
+        for (size_t i=0; i<nChains; ++i) {
+            Float pdf;
+            auto index = seedDistribution.sample(sampler->next1D(), pdf);
+            auto seed = allSeeds[index];
+            seed.pdf = pdf;
+            seeds.push_back(seed);                    
+        }
+        return seeds;
+    }
+
+private:
     /// Used to temporarily cache a parallel process while it is in operation
     ref<ParallelProcess> m_process;
     PSSMLTConfiguration m_config;
-    std::vector<std::vector<PositionedPathSeed>> pathSeeds;
+    std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
     ref<OutlierDetectorBitterly> detector;
-    int iteration;
+    int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
-    int iterations;
-    size_t totalMltBudget;
 };
 
 MTS_NAMESPACE_END

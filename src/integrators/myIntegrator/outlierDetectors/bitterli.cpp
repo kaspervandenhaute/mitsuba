@@ -2,6 +2,7 @@
 #include <cmath>
 #include "bitterli.h"
 
+
 MTS_NAMESPACE_BEGIN
 
 OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue) :
@@ -85,14 +86,38 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos, int spp) {
     return std::max(minThreshold, ((float) spp)/nbBuffers);
 }
 
-void OutlierDetectorBitterly::startIteration() {
+void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
-    setAdditionalThreshold();
+    setAdditionalThreshold(seeds, nChains);
 }
 
-void OutlierDetectorBitterly::setAdditionalThreshold() {
+void OutlierDetectorBitterly::setAdditionalThreshold(std::vector<PositionedPathSeed> const& seeds, size_t nChains) {
+
+    std::vector<float> probs;
+    probs.reserve(seeds.size());
+
+    float sum = 0;
+    for (auto& seed : seeds) {
+        sum += seed.luminance;
+    }
+    auto normalization = 1.f/sum;
+
+    PositionedPathSeed const* closestSeed = nullptr;
+    float closestDistance = std::numeric_limits<float>::infinity();
+    for (auto& seed : seeds) {
+        auto probNotPicked = std::pow(1.f - seed.luminance * normalization, nChains);
+        auto dist = probNotPicked - 0.5;
+        if (dist > 0 && dist < closestDistance) {
+            closestDistance = dist;
+            closestSeed = &seed;
+        }
+    }
     
+    if (closestDistance != std::numeric_limits<float>::infinity()) {
+        minValue = closestSeed->luminance;
+    }
+
 }
 
 

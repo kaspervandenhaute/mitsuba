@@ -146,7 +146,7 @@ public:
         /* Sanity check -- the luminance should match the one from
            the warmup phase - an error here would indicate inconsistencies
            regarding the use of random numbers during sample generation */
-        if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.001) {
+        if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.01) {
             Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                 "= %f, but expected luminance = %f", seed.sampleIndex, current->luminance, seed.luminance);
             return;

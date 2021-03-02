@@ -129,8 +129,6 @@ bool MyPathTracer::render(Scene *scene,
 
         Log(EInfo, "Starting on path tracing in iteration %i", iteration);
 
-        detector->startIteration();
-
         /* This is a sampling-based integrator - parallelize */
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
         
@@ -218,6 +216,9 @@ bool MyPathTracer::render(Scene *scene,
             m_process = NULL;
             
             process->develop();
+
+
+            detector->update(seeds, nbOfChains);
 
 
             if (proc->getReturnStatus() != ParallelProcess::ESuccess) {

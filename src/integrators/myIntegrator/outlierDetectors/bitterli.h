@@ -8,6 +8,9 @@
 
 #include <mitsuba/mitsuba.h>
 
+#include "../my_pathSeed.h"
+
+
 MTS_NAMESPACE_BEGIN
 
 struct RatioAndIndex {
@@ -73,7 +76,7 @@ public:
 
     void contribute(Point2i const& pos, float value);
     float calculateWeight(Point2i const& pos, float value, int spp);
-    void startIteration();
+    void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains);
 
 private:
     const int width, height;
@@ -87,7 +90,7 @@ private:
     float calcualateOccurencies(Point2i const& pos, float value);
     float calculateThreshold(Point2i const& pos, int spp);
     RatioAndIndex calculateRatioAndIndex(float value);
-    void setAdditionalThreshold();
+    void setAdditionalThreshold(std::vector<PositionedPathSeed> const& seeds, size_t nChains);
 
 };
 

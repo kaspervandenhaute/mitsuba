@@ -3,6 +3,8 @@
 #include <mitsuba/render/integrator.h>
 #include <mitsuba/core/bitmap.h>
 
+#include <string>
+
 #include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
 
@@ -133,6 +135,8 @@ private:
 
         seedDistribution.normalize();
 
+        Log(EInfo, seedDistribution.toString().c_str());
+
         std::vector<PositionedPathSeed> seeds;
         seeds.reserve(nChains);
         for (size_t i=0; i<nChains; ++i) {
@@ -143,6 +147,16 @@ private:
             seeds.push_back(seed);                    
         }
         return seeds;
+
+        // std::vector<PositionedPathSeed> seeds;
+        // seeds.reserve(nChains);
+        // for (size_t i=0; i<nChains; i++) {
+        //     int index = std::floor(sampler->next1D() * allSeeds.size());
+        //     auto seed = allSeeds[index];
+        //     seed.pdf = 1.f/nChains;
+        //     seeds.push_back(seed); 
+        // }
+        // return seeds;
     }
 
 private:

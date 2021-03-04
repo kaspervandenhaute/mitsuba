@@ -160,7 +160,7 @@ public:
 
         // Log(EInfo, "Setup of mlt done");
 
-        // Luminance correction
+        // Luminance correction f(u(0))/pmf(u(0)), see formula 9 in selective mlt
         auto correction = seed.luminance / seed.pdf;
 
         ref<Timer> timer = new Timer();
@@ -169,11 +169,12 @@ public:
         Float cumulativeWeight = 0;
         current->normalize(m_config.importanceMap);
         for (uint64_t mutationCtr=0; mutationCtr<m_config.nMutations && !stop; ++mutationCtr) {
-            // if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
-            //         && (int) timer->getMilliseconds() > wu->getTimeout())
-            //     break;
+            if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
+                    && (int) timer->getMilliseconds() > wu->getTimeout())
+                break;
 
             m_pathSampler->sampleSplats(Point2i(-1), *proposed);
+            // This does the normalisation of dividing by the luminance
             proposed->normalize(m_config.importanceMap);
 
             Float a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
@@ -188,8 +189,7 @@ public:
             Float currentWeight, proposedWeight;
 
 
-            if (a > 0) {
-                
+            if (a > 0) {  
                 //TODO: look into kelemen style weights
                 currentWeight = 1-a;
                 proposedWeight = a;
@@ -207,10 +207,13 @@ public:
 
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
-                    Spectrum value = current->getValue(k) * cumulativeWeight; // See formula 9 in selectively mlt
+                    Spectrum value = current->getValue(k);
+                    auto luminance = value.getLuminance();
+                    value *= correction * cumulativeWeight;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= correction;// / value.getLuminance();
+                        // value /= current->luminance;
+                        // value /= luminance;
                         result->put(current->getPosition(k), &value[0]);
                     }
                 }
@@ -230,10 +233,13 @@ public:
 
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
-                    Spectrum value = proposed->getValue(k) * proposedWeight;
+                    Spectrum value = proposed->getValue(k);
+                    auto luminance = value.getLuminance();
+                    value *= proposedWeight * correction;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
-                        value *= correction;// / value.getLuminance();
+                        // value /= current->luminance;
+                        // value /= luminance;
                         result->put(proposed->getPosition(k), &value[0]);
                     }
                 }
@@ -247,12 +253,14 @@ public:
         }
 
         /* Perform the last splat */
-        // TODO: check with pbrt, is currentWeight correct?
         for (size_t k=0; k<current->size(); ++k) {
-            Spectrum value = current->getValue(k) * cumulativeWeight;
+            Spectrum value = current->getValue(k);
+            auto luminance = value.getLuminance();
+            value *= correction * cumulativeWeight;
             if (!value.isZero()) {
                 // Log(EInfo, value.toString().c_str());
-                value *= correction;// / value.getLuminance();
+                // value /= current->luminance;
+                // value /= luminance;
                 result->put(current->getPosition(k), &value[0]);
             }
         }
@@ -324,12 +332,12 @@ void PSSMLTProcess::develop() {
 
     // TODO: can be skipped?
     for (size_t i=0; i<pixelCount; ++i) {
-        target[i] = accum[i];
+        // Normalise for the mlt budget (nb of mlt samples), see formula 9 selective mlt
+        target[i] = accum[i] /mlt_budget;
         // std::cout << (target[i] * (1.f/mlt_budget)).toString() << std::endl;
     }
-    m_developBuffer->scale(1.f/mlt_budget);
+    
     mlt_result->accumulate(m_developBuffer);
-    // m_film->addBitmap(m_developBuffer, 1.f/mlt_budget);
 
     m_refreshTimer->reset();
     m_queue->signalRefresh(m_job);

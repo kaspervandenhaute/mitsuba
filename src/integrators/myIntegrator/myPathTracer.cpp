@@ -184,7 +184,7 @@ bool MyPathTracer::render(Scene *scene,
                 process->bindResource("sampler", mltSamplerResID);
                 process->bindResource("rplSampler", rplSamplerResID);
 
-                Log(EInfo, "Binded resources");
+                // Log(EInfo, "Binded resources");
 
                 m_process = process;
                 sched->schedule(process);
@@ -206,7 +206,7 @@ bool MyPathTracer::render(Scene *scene,
     mltResult->scale(1.f/iterations);
     film->addBitmap(mltResult);
 
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
     
     return true;
 }

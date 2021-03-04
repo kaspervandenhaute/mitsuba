@@ -28,7 +28,7 @@ public:
         props.setInteger("height", size.y);
         props.setInteger("cropWidth", size.x);
         props.setInteger("cropHeight", size.y);
-        props.setBool("banner", false);
+        props.setBoolean("banner", false);
 
 
         ref<Film> film = static_cast<Film *> (PluginManager::getInstance()->createObject(MTS_CLASS(Film), props));

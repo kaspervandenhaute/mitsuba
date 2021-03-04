@@ -135,7 +135,7 @@ private:
 
         seedDistribution.normalize();
 
-        Log(EInfo, seedDistribution.toString().c_str());
+        // Log(EInfo, seedDistribution.toString().c_str());
 
         std::vector<PositionedPathSeed> seeds;
         seeds.reserve(nChains);
@@ -170,6 +170,7 @@ private:
     int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
+    ref<ImageBlock> pathResult;
 };
 
 MTS_NAMESPACE_END

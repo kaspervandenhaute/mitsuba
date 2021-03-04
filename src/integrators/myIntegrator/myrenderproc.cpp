@@ -113,7 +113,7 @@ ref<WorkProcessor> BlockedRenderProcess::createWorkProcessor() const {
 void BlockedRenderProcess::processResult(const WorkResult *result, bool cancelled) {
     const ImageBlock *block = static_cast<const ImageBlock *>(result);
     UniqueLock lock(m_resultMutex);
-    m_film->put(block);
+    // m_film->put(block);
     m_progress->update(++m_resultCount);
     lock.unlock();
     m_queue->signalWorkEnd(m_parent, block, cancelled);

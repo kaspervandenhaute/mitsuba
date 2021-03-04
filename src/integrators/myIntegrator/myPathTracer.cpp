@@ -79,6 +79,8 @@ bool MyPathTracer::render(Scene *scene,
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
     ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
+    // pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
+    pathResult = new ImageBlock(Bitmap::ESpectrumAlphaWeight, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
@@ -128,6 +130,7 @@ bool MyPathTracer::render(Scene *scene,
     for (iteration=0; iteration<iterations; ++iteration) {
 
         Log(EInfo, "Starting on path tracing in iteration %i", iteration);
+
 
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
         
@@ -199,12 +202,19 @@ bool MyPathTracer::render(Scene *scene,
                 }    
             }
         }
+
+        pathResult->accumulate(mltResult);
+        film->put(pathResult);
+        pathResult->clear();
+        mltResult->clear();
     }
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
-    mltResult->scale(1.f/iterations);
-    film->addBitmap(mltResult);
+    // mltResult->scale(1.f/iterations);
+    // film->addBitmap(mltResult);
+
+    // film->setBitmap(pathResult);
 
     BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
     
@@ -267,10 +277,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
             weightedAvg.put(weight*luminance);
             unweightedAvg.put(luminance);
 
+            weight = 0;
+
 
             if (iteration != 0) {
+                // Scale with nb of iterations
                 block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
-
                 if (weight > 0) {
                     // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
                     localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
@@ -282,6 +294,13 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler->advance();
         }
     }
+
+    LockGuard lock(seedMutex);
+
+    // pathResult->accumulate(block->getBitmap(), block->getOffset());
+
+    pathResult->put(block);
+
     if (!localPathSeeds.empty()) {
         LockGuard lock(seedMutex); // pathSeeds is global
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );

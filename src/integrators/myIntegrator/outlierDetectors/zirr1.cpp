@@ -17,13 +17,41 @@ OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float
 void OutlierDetectorZirr1::contribute(Point2i const& pos, float value) {
     assert(pos.y < height && pos.x < width);
 
-    // If the value of the contribution is bigger than max_value we ignore it.
+// If the value of the contribution is bigger than max_value we ignore it.
     if (value < maxValue) {
-        auto ratioAndIndex = calculateRatioAndIndex(value);
 
-        tempBuffer.add(pos.x, pos.y, ratioAndIndex.index, value*ratioAndIndex.ratio);
-        if (ratioAndIndex.index +1 < nbBuffers) {
-            tempBuffer.add(pos.x, pos.y, ratioAndIndex.index+1,  value*(1-ratioAndIndex.ratio));
+        float lowerScale = cascadeStart;
+        float upperScale = lowerScale * b;
+        int baseIndex = 0;
+
+        /* find adjacent layers in cascade for <luminance> */
+        while (!(value < upperScale) && baseIndex < nbBuffers - 2) {
+            lowerScale = upperScale;
+            upperScale *= b;
+            ++baseIndex;
+        }
+
+        /* weight for lower buffer */
+        float weightLower;
+        if (value <= lowerScale)
+            weightLower = 1.0f;
+        else if (value < upperScale)
+            weightLower = std::max( 0.0f,
+                (lowerScale / value - lowerScale / upperScale) / (1 - lowerScale / upperScale) );
+        else // Inf, NaN ...
+            weightLower = 0.0f;
+        
+        /* weight for higher buffer */
+        float weightUpper;
+        if (value < upperScale)
+            weightUpper = std::max(0.0f, 1 - weightLower);
+        else // out of cascade range, we don't expect this to converge
+            weightUpper = upperScale / value;
+    
+
+        tempBuffer.add(pos.x, pos.y, baseIndex, value*weightLower);
+        if (baseIndex +1 < nbBuffers) {
+            tempBuffer.add(pos.x, pos.y, baseIndex+1,  value*weightUpper);
         }
     }
 }
@@ -68,11 +96,11 @@ float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) {
 
     float occurencies = calcualateOccurencies(pos, value);
 
-    if (occurencies < kappaMin) {
-        return 1;
-    }
-    auto rStar = spp/(occurencies-kappaMin);
-    if (rStar > threshold) {
+    // if (occurencies < kappaMin) {
+    //     return 1;
+    // }
+    auto rStarC = spp/(occurencies-kappaMin);
+    if (rStarC > threshold) {
         return 1;
     }
 

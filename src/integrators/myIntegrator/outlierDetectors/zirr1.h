@@ -31,6 +31,8 @@ private:
     Bitmap3d<float> buffer, tempBuffer;
     int spp;
     std::vector<float> powersOfb;
+    float Emin;
+    float cascadeStart = 1;
 };
 
 MTS_NAMESPACE_END

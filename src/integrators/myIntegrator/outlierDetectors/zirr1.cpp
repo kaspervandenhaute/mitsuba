@@ -8,7 +8,7 @@ OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float
         width(width), height(height), b(b), maxValue(maxValue), kappaMin(kappaMin), threshold(threshold), 
         nbBuffers(std::ceil(std::log(maxValue))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
         std::cout << nbBuffers << "  " << std::ceil(std::log(maxValue)) << std::endl;
-        powersOfb[0] = b;
+        powersOfb[0] = 1;
         for (int i=1; i<nbBuffers; ++i) {
             powersOfb[i] = powersOfb[i-1] * b;
         }
@@ -58,6 +58,10 @@ float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float valu
 float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) {
     assert(pos.y < height && pos.x < width);
 
+    if (value < 0.0000001) {
+        return 0;
+    }
+
     if (value > maxValue) {
         return 1;
     }
@@ -88,7 +92,7 @@ RatioAndIndex OutlierDetectorZirr1::calculateRatioAndIndex(float value) {
         ratio = (powersOfb[j]/value - invb) / (1-invb);
     }
     // std::cout << "J is: " << j << "  nbBuffers: " << nbBuffers << std::endl;
-    // assert(ratio >= 0 && ratio <= 1);
+    assert(ratio >= 0 && ratio <= 1);
     assert(j < nbBuffers);
     return {ratio, j};
 }

@@ -28,9 +28,8 @@ public:
     }
 
     void put(T val) {
-        avg = avg*count + val;
         ++count;
-        avg /= count;
+        avg = avg * ((float) (count-1)/count) + val/count;
     }
 
 private:
@@ -127,7 +126,7 @@ public:
 
 private:
     /// Draw nChains samples from allSeeds proportional to their luminance. Samples can be chosen multiple times.
-    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed> const& allSeeds, size_t nChains, Sampler* sampler) {
+    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains, Sampler* sampler) {
         
         DiscreteDistribution seedDistribution(allSeeds.size());
         for (auto& seed : allSeeds) {
@@ -167,13 +166,14 @@ private:
     std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
-    // ref<OutlierDetectorZirr1> detector;
-    ref<OutlierDetectorBitterly> detector;
+    ref<OutlierDetectorZirr1> detector;
+    // ref<OutlierDetectorBitterly> detector;
     int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;
     bool noMlt;
+    Float outlierDetectorThreshold;
 };
 
 MTS_NAMESPACE_END

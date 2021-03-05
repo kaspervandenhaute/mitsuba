@@ -45,6 +45,7 @@ MyPathTracer::MyPathTracer(const Properties &props)
 
         iterations = props.getInteger("iterations", 10);
         noMlt = props.getBoolean("noMlt", false);
+        outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);
 
         seedMutex = new Mutex();
   }
@@ -89,8 +90,8 @@ bool MyPathTracer::render(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
-    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, 0.2);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -169,43 +170,46 @@ bool MyPathTracer::render(Scene *scene,
                 // mlt budget is nb chains * nb mutations
                 auto mltBudget = computeMltBudget();
                 auto nbOfChains = mltBudget / m_config.nMutations;
-                m_config.workUnits = nbOfChains;
 
-                // Pick seeds proportional to their luminance
-                auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
-                // update the detector for the next iteration.
-                detector->update(pathSeeds, nbOfChains, samplesPerPixel*iteration);
+                if (nbOfChains > 0) {
+                    m_config.workUnits = nbOfChains;
 
-                // Every seed is used by one work unit.
-                assert(seeds.size() == (size_t) m_config.workUnits);
+                    // Pick seeds proportional to their luminance
+                    auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
+                    // update the detector for the next iteration.
+                    detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
 
-                // We dont need the original list any more. The seeds that will be used are copied to seeds.
-                pathSeeds.clear();
-            
-                Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance);
+                    // Every seed is used by one work unit.
+                    assert(seeds.size() == (size_t) m_config.workUnits);
 
-                ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult);
-                process->bindResource("scene", sceneResID);
-                process->bindResource("sensor", sensorResID);
-                process->bindResource("sampler", mltSamplerResID);
-                process->bindResource("rplSampler", rplSamplerResID);
-
-                // Log(EInfo, "Binded resources");
-
-                m_process = process;
-                sched->schedule(process);
-                sched->wait(process);
-                m_process = NULL;
+                    // We dont need the original list any more. The seeds that will be used are copied to seeds.
+                    pathSeeds.clear();
                 
-                process->develop();
+                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance);
+
+                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult);
+                    process->bindResource("scene", sceneResID);
+                    process->bindResource("sensor", sensorResID);
+                    process->bindResource("sampler", mltSamplerResID);
+                    process->bindResource("rplSampler", rplSamplerResID);
+
+                    // Log(EInfo, "Binded resources");
+
+                    m_process = process;
+                    sched->schedule(process);
+                    sched->wait(process);
+                    m_process = NULL;
+                    
+                    process->develop();
 
 
-                if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
-                    Log(EError, "Error while mlting.");
-                }    
+                    if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
+                        Log(EError, "Error while mlting.");
+                    }    
+                }
             }
         } else {
-            detector->update(iteration * samplesPerPixel);
+            detector->update((iteration+1) * samplesPerPixel);
         }
 
         film->addBitmap(mltResult, 1.f/iterations);
@@ -237,6 +241,9 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
 
 size_t MyPathTracer::computeMltBudget() const {
     Float r = weightedAvg.get() / unweightedAvg.get();
+    if (r >= 1) {
+        return 0;
+    }
     return samplesTotal * r / (1-r);
 }
 

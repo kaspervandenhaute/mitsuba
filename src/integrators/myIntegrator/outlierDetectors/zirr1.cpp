@@ -37,12 +37,12 @@ float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float valu
         
         float result = 0;
         for (int i=-1; i<=1; ++i) {
-            if (j + i < nbBuffers && j+i > 0) {
+            if (j + i < nbBuffers && j+i >= 0) {
                 for (int x0=-1; x0<=1; ++x0) {
                     for (int y0=-1; y0<=1; ++y0) {
                         auto x = pos.x + x0;
                         auto y = pos.y + y0;
-                        if (x > 0 && x < width && y > 0 && y < height) {
+                        if (x >= 0 && x < width && y >= 0 && y < height) {
                             result += spp * buffer.get(pos.x, pos.y, j+i) / powersOfb[j+i];  
                         }
                     }
@@ -67,10 +67,10 @@ float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) {
     if (occurencies < kappaMin) {
         return 1;
     }
-    // auto rStar = spp/(occurencies-kappaMin);
-    // if (rStar > threshold) {
-    //     return 1;
-    // }
+    auto rStar = spp/(occurencies-kappaMin);
+    if (rStar > threshold) {
+        return 1;
+    }
 
     return 0;
 }
@@ -94,10 +94,15 @@ RatioAndIndex OutlierDetectorZirr1::calculateRatioAndIndex(float value) {
 }
 
 void OutlierDetectorZirr1::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
+    update(newSpp);
+}
+
+void OutlierDetectorZirr1::update(int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
     spp = newSpp;
 }
+
 
 
 MTS_NAMESPACE_END

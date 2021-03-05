@@ -89,8 +89,8 @@ bool MyPathTracer::render(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
-    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, 1);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, 0.2);
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -204,6 +204,8 @@ bool MyPathTracer::render(Scene *scene,
                     Log(EError, "Error while mlting.");
                 }    
             }
+        } else {
+            detector->update(iteration * samplesPerPixel);
         }
 
         film->addBitmap(mltResult, 1.f/iterations);
@@ -294,12 +296,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler->advance();
         }
     }
-
-    LockGuard lock(seedMutex);
-
-    // pathResult->accumulate(block->getBitmap(), block->getOffset());
-
-    pathResult->put(block);
 
     if (!localPathSeeds.empty()) {
         LockGuard lock(seedMutex); // pathSeeds is global

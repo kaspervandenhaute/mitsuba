@@ -1,0 +1,2 @@
+mitsuba import failed: include .cpp in scons files
+errors in constants -> change std=c++11 to std=gnu++11

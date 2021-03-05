@@ -16,6 +16,7 @@ public:
     void contribute(Point2i const& pos, float value);
     float calculateWeight(Point2i const& pos, float value);
     void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp);
+    void update(int newSpp);
 
 private:
     float calcualateOccurencies(Point2i const& pos, float value);

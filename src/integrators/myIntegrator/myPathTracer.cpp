@@ -1,18 +1,19 @@
 
+#include "myPathTracer.h"
 
 #include <string>
 #include <typeinfo>
 
-#include "myPathTracer.h"
 #include <mitsuba/core/plugin.h>
+#include <mitsuba/bidir/pathsampler.h>
+#include <mitsuba/bidir/rsampler.h>
+
 #include "myrenderproc.h"
 #include "utils/writeBitmap.h"
-
 #include "MutatablePssmltSampler.h"
 #include "my_pssmlt_proc.h"
 
-#include <mitsuba/bidir/pathsampler.h>
-#include <mitsuba/bidir/rsampler.h>
+
 
 
 MTS_NAMESPACE_BEGIN
@@ -43,6 +44,7 @@ MyPathTracer::MyPathTracer(const Properties &props)
         m_config.timeout = props.getInteger("timeout", 0);
 
         iterations = props.getInteger("iterations", 10);
+        noMlt = props.getBoolean("noMlt", false);
 
         seedMutex = new Mutex();
   }
@@ -87,7 +89,8 @@ bool MyPathTracer::render(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, 1);
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -151,7 +154,7 @@ bool MyPathTracer::render(Scene *scene,
             Log(EError, "Error while path tracing.");
         }
 
-        if (iteration != 0) {
+        if (iteration != 0 && !noMlt) {
             Float avgLuminance = 0;
             for (auto& seed : pathSeeds) {
                 avgLuminance += seed.luminance;
@@ -171,7 +174,7 @@ bool MyPathTracer::render(Scene *scene,
                 // Pick seeds proportional to their luminance
                 auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
                 // update the detector for the next iteration.
-                detector->update(pathSeeds, nbOfChains);
+                detector->update(pathSeeds, nbOfChains, samplesPerPixel*iteration);
 
                 // Every seed is used by one work unit.
                 assert(seeds.size() == (size_t) m_config.workUnits);
@@ -203,8 +206,8 @@ bool MyPathTracer::render(Scene *scene,
             }
         }
 
-        pathResult->accumulate(mltResult);
-        film->put(pathResult);
+        film->addBitmap(mltResult, 1.f/iterations);
+        // film->put(pathResult);
         pathResult->clear();
         mltResult->clear();
     }
@@ -272,16 +275,13 @@ void MyPathTracer::renderBlock(const Scene *scene,
             // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
 
             detector->contribute(offset, luminance);
-            auto weight = detector->calculateWeight(offset, luminance, iteration*samplesPerPixel);
-
-            weightedAvg.put(weight*luminance);
+            
             unweightedAvg.put(luminance);
 
-            weight = 0;
-
-
             if (iteration != 0) {
-                // Scale with nb of iterations
+                auto weight = detector->calculateWeight(offset, luminance);
+                weightedAvg.put(weight*luminance);
+                
                 block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
                 if (weight > 0) {
                     // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);

@@ -208,7 +208,6 @@ public:
             if (accept) {
                 for (size_t k=0; k<current->size(); ++k) {
                     Spectrum value = current->getValue(k);
-                    auto luminance = value.getLuminance();
                     value *= correction * cumulativeWeight;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
@@ -234,7 +233,6 @@ public:
             } else {
                 for (size_t k=0; k<proposed->size(); ++k) {
                     Spectrum value = proposed->getValue(k);
-                    auto luminance = value.getLuminance();
                     value *= proposedWeight * correction;
                     if (!value.isZero()) {
                         // Log(EInfo, value.toString().c_str());
@@ -255,7 +253,6 @@ public:
         /* Perform the last splat */
         for (size_t k=0; k<current->size(); ++k) {
             Spectrum value = current->getValue(k);
-            auto luminance = value.getLuminance();
             value *= correction * cumulativeWeight;
             if (!value.isZero()) {
                 // Log(EInfo, value.toString().c_str());

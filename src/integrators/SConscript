@@ -52,6 +52,7 @@ plugins += myEnv.SharedLibrary('myintegrator', ['myIntegrator/myPathTracer.cpp',
 											    'myIntegrator/my_pssmlt_proc.cpp',
 											    'myIntegrator/mutatablePssmltSampler.cpp',
 											    'myIntegrator/outlierDetectors/bitterli.cpp',
+											    'myIntegrator/outlierDetectors/zirr1.cpp',
 											    'pssmlt/pssmlt_sampler.cpp'								
 											     ]);
 

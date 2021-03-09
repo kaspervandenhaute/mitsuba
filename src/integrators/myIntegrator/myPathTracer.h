@@ -166,14 +166,16 @@ private:
     std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
-    ref<OutlierDetectorZirr1> detector;
-    // ref<OutlierDetectorBitterly> detector;
+    // ref<OutlierDetectorZirr1> detector;
+    ref<OutlierDetectorBitterly> detector;
     int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
-    ref<ImageBlock> pathResult;
+    ref<Bitmap> pathResult;
     bool noMlt;
     Float outlierDetectorThreshold;
+    int intermediatePeriod;
+    std::string intermediatePath;
 };
 
 MTS_NAMESPACE_END

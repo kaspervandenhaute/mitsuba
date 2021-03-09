@@ -46,6 +46,10 @@ MyPathTracer::MyPathTracer(const Properties &props)
         iterations = props.getInteger("iterations", 10);
         noMlt = props.getBoolean("noMlt", false);
         outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);
+        intermediatePeriod = props.getInteger("intermediatePeriod", -1);
+        if (intermediatePeriod > 0) {
+            intermediatePath = props.getString("intermediatePath");
+        }
 
         seedMutex = new Mutex();
   }
@@ -82,16 +86,16 @@ bool MyPathTracer::render(Scene *scene,
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
     ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
-    // pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
-    pathResult = new ImageBlock(Bitmap::ESpectrumAlphaWeight, cropSize, film->getReconstructionFilter());
+    pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
+    // pathResult = new ImageBlock(Bitmap::ESpectrumAlphaWeight, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
-    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -112,7 +116,7 @@ bool MyPathTracer::render(Scene *scene,
     int mltSamplerResID = sched->registerMultiResource(mltSamplers);
     for (size_t i=0; i<sched->getCoreCount(); ++i)
         mltSamplers[i]->decRef();
-
+ 
     // path tracer samplers
     ref<ReplayableSampler> rplSampler = new ReplayableSampler();
     std::vector<SerializableObject*> rplSamplers(sched->getCoreCount());
@@ -169,7 +173,9 @@ bool MyPathTracer::render(Scene *scene,
             if (nb_seeds > 0) {
                 // mlt budget is nb chains * nb mutations
                 auto mltBudget = computeMltBudget();
-                auto nbOfChains = mltBudget / m_config.nMutations;
+                // if there are seeds, samples have been discarded. They need to be put back
+                auto nbOfChains = std::max(mltBudget / m_config.nMutations, (size_t) 1);
+                nbOfChains = std::min(nbOfChains, samplesTotal * m_config.nMutations);
 
                 if (nbOfChains > 0) {
                     m_config.workUnits = nbOfChains;
@@ -212,18 +218,21 @@ bool MyPathTracer::render(Scene *scene,
             detector->update((iteration+1) * samplesPerPixel);
         }
 
-        film->addBitmap(mltResult, 1.f/iterations);
-        // film->put(pathResult);
-        pathResult->clear();
-        mltResult->clear();
+        // film->addBitmap(mltResult, 1.f/iterations);
+        // mltResult->clear();
+
+        if (intermediatePeriod > 0 && iteration % intermediatePeriod == 0) {
+            // film->setDestinationFile(intermediatePath + std::to_string(iteration) + ".exr", scene->getBlockSize());
+            // film->develop(scene, 0);
+            auto intermediate = mltResult->clone();
+            intermediate->scale(1.f/iteration);
+            BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
+        }
     }
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
-    // mltResult->scale(1.f/iterations);
-    // film->addBitmap(mltResult);
-
-    // film->setBitmap(pathResult);
+    film->addBitmap(mltResult, 1.f/iterations);
 
     BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
     
@@ -241,10 +250,14 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
 
 size_t MyPathTracer::computeMltBudget() const {
     Float r = weightedAvg.get() / unweightedAvg.get();
-    if (r >= 1) {
+    // When all samples are outliers r will be close to 1
+    if (r >= 0.95 && r <= 1.05) {
+        return samplesTotal * m_config.nMutations;
+    } else if (r >= 1.05) {
         return 0;
     }
     return samplesTotal * r / (1-r);
+    // return samplesTotal;
 }
 
 void MyPathTracer::renderBlock(const Scene *scene,
@@ -289,9 +302,20 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             if (iteration != 0) {
                 auto weight = detector->calculateWeight(offset, luminance);
+
+                // All inliers
+                weight = 0;
+
+                // All outliers
+                // if (luminance > 0) {
+                //     weight = 1;
+                // } else {
+                //     weight = 0;
+                // }
+                
                 weightedAvg.put(weight*luminance);
                 
-                block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
+                // block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
                 if (weight > 0) {
                     // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
                     localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
@@ -305,7 +329,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
     }
 
     if (!localPathSeeds.empty()) {
-        LockGuard lock(seedMutex); // pathSeeds is global
+        LockGuard lock(seedMutex); // pathSeeds is shared by all threads
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
     }
 }

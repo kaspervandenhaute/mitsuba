@@ -11,7 +11,8 @@ OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBu
         std::cout << nbBuffers << std::endl;
 }
 
-void OutlierDetectorBitterly::contribute(Point2i const& pos, float value) {
+void OutlierDetectorBitterly::contribute(Point2 const& posFloat, float value) {
+    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
     assert(pos.y < height && pos.x < width);
 
     // If the value of the contribution is bigger than max_value we ignore it.
@@ -40,7 +41,8 @@ float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float v
     return 0;
 }   
 
-float OutlierDetectorBitterly::calculateWeight(Point2i const& pos, float value) const {
+float OutlierDetectorBitterly::calculateWeight(Point2 const& posFloat, float value) const {
+    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
     assert(pos.y < height && pos.x < width);
 
     if (value > maxValue) {

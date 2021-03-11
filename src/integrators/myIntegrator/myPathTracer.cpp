@@ -302,12 +302,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
 
-            detector->contribute(offset, luminance);
+            detector->contribute(position, luminance);
             
             unweightedAvg.put(luminance);
 
             if (iteration != 0) {
-                auto weight = detector->calculateWeight(offset, luminance);
+                auto weight = detector->calculateWeight(position, luminance);
 
                 // All inliers
                 // weight = 0;

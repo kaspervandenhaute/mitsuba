@@ -194,7 +194,10 @@ public:
                 if (a > 0) {  
                     //TODO: look into kelemen style weights
                     // TODO: works only for unidirectional
-                    if (m_outlierDetector->calculateWeight(Point2i(std::floor(proposed->getPosition(0).x), std::floor(proposed->getPosition(0).y)), proposed->luminance) > 0) {
+
+                    /* Convert to pixel coordinates */
+
+                    if (m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance) > 0) {
                         currentWeight = 1;
                         proposedWeight = 0;
                         accept = false;

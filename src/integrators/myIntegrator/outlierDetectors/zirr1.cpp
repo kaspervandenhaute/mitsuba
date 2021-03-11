@@ -14,7 +14,8 @@ OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float
         }
 }
 
-void OutlierDetectorZirr1::contribute(Point2i const& pos, float value) {
+void OutlierDetectorZirr1::contribute(Point2 const& posFloat, float value) {
+    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
     assert(pos.y < height && pos.x < width);
 
 // If the value of the contribution is bigger than max_value we ignore it.
@@ -83,7 +84,8 @@ float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float valu
     return 0;
 }   
 
-float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) const {
+float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value) const {
+    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
     assert(pos.y < height && pos.x < width);
 
     if (value < 0.0000001) {

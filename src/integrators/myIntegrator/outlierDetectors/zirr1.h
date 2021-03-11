@@ -14,8 +14,8 @@ class OutlierDetectorZirr1 : public OutlierDetector {
 public:
     OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappaMin, float threshold);
 
-    void contribute(Point2i const& pos, float value) override;
-    float calculateWeight(Point2i const& pos, float value) const override;
+    void contribute(Point2 const& pos, float value) override;
+    float calculateWeight(Point2 const& pos, float value) const override;
     void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) override;
     void update(int newSpp) override;
 

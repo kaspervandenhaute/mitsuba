@@ -17,8 +17,8 @@ class OutlierDetectorBitterly : public OutlierDetector {
 public:
     OutlierDetectorBitterly(int width, int height, int nbBuffers, float alfa, float beta, float maxValue);
 
-    void contribute(Point2i const& pos, float value) override;
-    float calculateWeight(Point2i const& pos, float value) const override;
+    void contribute(Point2 const& pos, float value) override;
+    float calculateWeight(Point2 const& pos, float value) const override;
     void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) override;
     void update(int newSpp) override;
 

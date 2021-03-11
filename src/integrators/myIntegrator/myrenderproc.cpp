@@ -89,7 +89,7 @@ BlockedRenderProcess::BlockedRenderProcess(const RenderJob *parent, RenderQueue 
         int blockSize) : m_queue(queue), m_parent(parent), m_resultCount(0), m_progress(NULL) {
     m_blockSize = blockSize;
     m_resultMutex = new Mutex();
-    m_pixelFormat = Bitmap::ESpectrumAlphaWeight;
+    m_pixelFormat = Bitmap::ESpectrum;
     m_channelCount = -1;
     m_warnInvalid = true;
 }
@@ -113,7 +113,7 @@ ref<WorkProcessor> BlockedRenderProcess::createWorkProcessor() const {
 void BlockedRenderProcess::processResult(const WorkResult *result, bool cancelled) {
     const ImageBlock *block = static_cast<const ImageBlock *>(result);
     UniqueLock lock(m_resultMutex);
-    m_film->put(block);
+    // m_film->put(block);
     m_progress->update(++m_resultCount);
     lock.unlock();
     m_queue->signalWorkEnd(m_parent, block, cancelled);

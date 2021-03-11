@@ -171,7 +171,7 @@ private:
     int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
-    ref<Bitmap> pathResult;
+    ref<ImageBlock> pathResult;
     bool noMlt;
     Float outlierDetectorThreshold;
     int intermediatePeriod;

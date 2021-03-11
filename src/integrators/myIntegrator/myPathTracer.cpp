@@ -86,8 +86,8 @@ bool MyPathTracer::render(Scene *scene,
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
     ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
-    pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
-    // pathResult = new ImageBlock(Bitmap::ESpectrumAlphaWeight, cropSize, film->getReconstructionFilter());
+    // pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
+    pathResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
@@ -168,8 +168,6 @@ bool MyPathTracer::render(Scene *scene,
             avgLuminance /= nb_seeds;
             m_config.luminance = avgLuminance;
 
-
-
             if (nb_seeds > 0) {
                 // mlt budget is nb chains * nb mutations
                 auto mltBudget = computeMltBudget();
@@ -221,10 +219,11 @@ bool MyPathTracer::render(Scene *scene,
         // film->addBitmap(mltResult, 1.f/iterations);
         // mltResult->clear();
 
-        if (intermediatePeriod > 0 && iteration % intermediatePeriod == 0) {
+        if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
             // film->setDestinationFile(intermediatePath + std::to_string(iteration) + ".exr", scene->getBlockSize());
             // film->develop(scene, 0);
             auto intermediate = mltResult->clone();
+            intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
             intermediate->scale(1.f/iteration);
             BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
         }
@@ -232,6 +231,7 @@ bool MyPathTracer::render(Scene *scene,
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
+    // TODO: add path result
     film->addBitmap(mltResult, 1.f/iterations);
 
     BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
@@ -274,6 +274,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
+    auto invSpp = 1.f/samplesPerPixel;
+
+
     // for (size_t i = 0; i<1; ++i) {
     for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
@@ -304,7 +307,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 auto weight = detector->calculateWeight(offset, luminance);
 
                 // All inliers
-                weight = 0;
+                // weight = 0;
 
                 // All outliers
                 // if (luminance > 0) {
@@ -315,7 +318,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 weightedAvg.put(weight*luminance);
                 
-                // block->put(position, spec * (1-weight), 1); //TODO: scaling of samples
+                block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
                     // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
                     localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
@@ -327,6 +330,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
             sampler->advance();
         }
     }
+
+    LockGuard lock(seedMutex);
+    pathResult->put(block);
 
     if (!localPathSeeds.empty()) {
         LockGuard lock(seedMutex); // pathSeeds is shared by all threads

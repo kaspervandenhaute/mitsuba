@@ -56,7 +56,7 @@ void OutlierDetectorZirr1::contribute(Point2i const& pos, float value) {
     }
 }
 
-float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float value) {
+float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float value) const {
     assert(pos.y < height && pos.x < width);
 
     if (value < maxValue) {
@@ -83,7 +83,7 @@ float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float valu
     return 0;
 }   
 
-float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) {
+float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) const {
     assert(pos.y < height && pos.x < width);
 
     if (value < 0.0000001) {
@@ -107,7 +107,7 @@ float OutlierDetectorZirr1::calculateWeight(Point2i const& pos, float value) {
     return 0;
 }
 
-RatioAndIndex OutlierDetectorZirr1::calculateRatioAndIndex(float value) {
+RatioAndIndex OutlierDetectorZirr1::calculateRatioAndIndex(float value) const {
     int j = std::floor(std::log(value) / std::log(b)); //TODO: store 1/log(beta)
 
     float ratio;

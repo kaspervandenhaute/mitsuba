@@ -21,7 +21,7 @@ struct Bitmap3d {
         data = new T[size()]();
     }
 
-    inline T get(size_t x, size_t y, size_t z) {
+    inline T get(size_t x, size_t y, size_t z) const {
         assert(x < width && y < height && z < depth);
         return data[x + width*y + width*height*z];
     }
@@ -52,7 +52,7 @@ struct Bitmap3d {
         }
     }
 
-    inline size_t size() {
+    inline size_t size() const {
         return width*height*depth;
     }
 

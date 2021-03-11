@@ -92,16 +92,16 @@ struct PositionedPathSeed {
 class PositionedSeedWorkUnit : public WorkUnit {
 public:
     inline void set(const WorkUnit *wu) {
-        m_seed = static_cast<const PositionedSeedWorkUnit*>(wu)->m_seed;
+        m_seeds = static_cast<const PositionedSeedWorkUnit*>(wu)->m_seeds;
         m_timeout = static_cast<const PositionedSeedWorkUnit*>(wu)->m_timeout;
     }
 
-    inline const PositionedPathSeed &getSeed() const {
-        return m_seed;
+    inline const std::vector<PositionedPathSeed> &getSeeds() const {
+        return m_seeds;
     }
 
-    inline void setSeed(const PositionedPathSeed &seed) {
-        m_seed = seed;
+    inline void setSeeds(const std::vector<PositionedPathSeed> &seeds) {
+        m_seeds = seeds;
     }
 
     inline int getTimeout() const {
@@ -112,15 +112,16 @@ public:
         m_timeout = timeout;
     }
 
-    inline void load(Stream *stream) {
-        m_seed = PositionedPathSeed(stream);
-        m_timeout = stream->readInt();
-    }
+    //TODO
+    // inline void load(Stream *stream) {
+    //     m_seeds = PositionedPathSeed(stream);
+    //     m_timeout = stream->readInt();
+    // }
 
-    inline void save(Stream *stream) const {
-        m_seed.serialize(stream);
-        stream->writeInt(m_timeout);
-    }
+    // inline void save(Stream *stream) const {
+    //     m_seed.serialize(stream);
+    //     stream->writeInt(m_timeout);
+    // }
 
     inline std::string toString() const {
         return "SeedWorkUnit[]";
@@ -128,7 +129,7 @@ public:
 
     MTS_DECLARE_CLASS()
 private:
-    PositionedPathSeed m_seed;
+    std::vector<PositionedPathSeed> m_seeds;
     int m_timeout;
 };
 

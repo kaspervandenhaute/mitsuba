@@ -179,22 +179,22 @@ bool MyPathTracer::render(Scene *scene,
                 nbOfChains = std::min(nbOfChains, samplesTotal * m_config.nMutations);
 
                 if (nbOfChains > 0) {
-                    m_config.workUnits = nbOfChains;
+                    m_config.workUnits = std::min(nCores*4, nbOfChains);
 
                     // Pick seeds proportional to their luminance
                     auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
                     // update the detector for the next iteration.
                     detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
 
-                    // Every seed is used by one work unit.
-                    assert(seeds.size() == (size_t) m_config.workUnits);
+                    // Multiple seeds per work unit
+                    assert(seeds.size() >= (size_t) m_config.workUnits);
 
                     // We dont need the original list any more. The seeds that will be used are copied to seeds.
                     pathSeeds.clear();
                 
                     Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance);
 
-                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult);
+                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult, detector);
                     process->bindResource("scene", sceneResID);
                     process->bindResource("sensor", sensorResID);
                     process->bindResource("sampler", mltSamplerResID);

@@ -25,7 +25,7 @@ void OutlierDetectorBitterly::contribute(Point2i const& pos, float value) {
     }
 }
 
-float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float value) {
+float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float value) const {
     assert(pos.y < height && pos.x < width);
 
     if (value < maxValue) {
@@ -40,7 +40,7 @@ float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float v
     return 0;
 }   
 
-float OutlierDetectorBitterly::calculateWeight(Point2i const& pos, float value) {
+float OutlierDetectorBitterly::calculateWeight(Point2i const& pos, float value) const {
     assert(pos.y < height && pos.x < width);
 
     if (value > maxValue) {
@@ -58,7 +58,7 @@ float OutlierDetectorBitterly::calculateWeight(Point2i const& pos, float value) 
     return 0;
 }
 
-RatioAndIndex OutlierDetectorBitterly::calculateRatioAndIndex(float value) {
+RatioAndIndex OutlierDetectorBitterly::calculateRatioAndIndex(float value) const {
     float logVal = std::log(value * alfaInv) / std::log(beta); //TODO: store 1/log(beta)
     int j = std::floor(logVal);
 
@@ -82,7 +82,7 @@ RatioAndIndex OutlierDetectorBitterly::calculateRatioAndIndex(float value) {
     return {ratio, j};
 }
 
-float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) {
+float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
     return std::max(minThreshold, ((float) spp)/nbBuffers);
 }
 

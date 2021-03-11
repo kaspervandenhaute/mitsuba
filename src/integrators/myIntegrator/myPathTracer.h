@@ -8,8 +8,7 @@
 #include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
 
-#include "outlierDetectors/bitterli.h"
-#include "outlierDetectors/zirr1.h"
+#include "outlierDetectors/outlierDetector.h"
 
 
 #ifndef MY_PATH_TRACER
@@ -167,7 +166,7 @@ private:
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
     // ref<OutlierDetectorZirr1> detector;
-    ref<OutlierDetectorBitterly> detector;
+    ref<OutlierDetector> detector;
     int iteration, iterations;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;

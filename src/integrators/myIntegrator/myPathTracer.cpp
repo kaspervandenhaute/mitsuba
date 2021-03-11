@@ -13,6 +13,9 @@
 #include "MutatablePssmltSampler.h"
 #include "my_pssmlt_proc.h"
 
+#include "outlierDetectors/bitterli.h"
+#include "outlierDetectors/zirr1.h"
+
 
 
 

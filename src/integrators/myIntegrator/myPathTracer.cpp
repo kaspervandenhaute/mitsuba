@@ -3,6 +3,7 @@
 
 #include <string>
 #include <typeinfo>
+#include <stdio.h>
 
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/bidir/pathsampler.h>
@@ -15,6 +16,7 @@
 
 #include "outlierDetectors/bitterli.h"
 #include "outlierDetectors/zirr1.h"
+#include "outlierDetectors/testDetector.h"
 
 
 
@@ -89,7 +91,6 @@ bool MyPathTracer::render(Scene *scene,
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
     ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
-    // pathResult = new Bitmap(Bitmap::ESpectrumAlphaWeight, Bitmap::EFloat, cropSize);
     pathResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
@@ -99,6 +100,7 @@ bool MyPathTracer::render(Scene *scene,
 
     detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
+    // detector = new TestOutlierDetector();
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -234,10 +236,12 @@ bool MyPathTracer::render(Scene *scene,
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
 
-    // TODO: add path result
-    film->addBitmap(mltResult, 1.f/iterations);
+    mltResult->scale(1.f/iterations);
+    mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
 
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
+    film->addBitmap(mltResult);
+
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
     
     return true;
 }
@@ -301,7 +305,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto luminance = splatList.luminance;
 
             // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
-
+            
             detector->contribute(position, luminance);
             
             unweightedAvg.put(luminance);
@@ -323,8 +327,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
-                    // localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
-                    localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
+                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
+                    // localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
                     // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
                     nb_seeds++;
                 } 

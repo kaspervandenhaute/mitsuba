@@ -179,14 +179,16 @@ public:
                 // This does the normalisation of dividing by the luminance
                 proposed->normalize(m_config.importanceMap);
 
-                Float a;
-
                 // TODO: works only for unidirectional
-                if (m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance) > 0) {
-                    a = 0; // Mlt integrates f(u) * (1-w) with w == 0 || w == 1 => if outlier (1-w) == 0 => integrant is 0 => a == 0
-                } else {
-                    a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
+                // Mlt integrates f(u) * w with w == 0 || w == 1
+                float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
+                
+                for (auto& splat : proposed->splats) {
+                    splat.second *= w;
                 }
+                proposed->luminance *= w;
+
+                Float a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
 
                 if (std::isnan(proposed->luminance) || proposed->luminance < 0) {
                     Log(EWarn, "Encountered a sample with luminance = %f, ignoring!",
@@ -206,7 +208,6 @@ public:
                     
                     accept = (a == 1) || (random->nextFloat() < a);
                     
-
                 } else {
                     currentWeight = 1;
                     proposedWeight = 0;

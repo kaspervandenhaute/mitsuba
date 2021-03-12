@@ -6,13 +6,16 @@
 MTS_NAMESPACE_BEGIN
 
 OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue) :
-        width(width), height(height), nbBuffers(7/*TODO What the FUCK?!! */), alfaInv(1/alfa), beta(beta), maxValue(maxValue), minValue(0.5),
+        width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta), maxValue(maxValue), minValue(0.5),
         buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0) {
         std::cout << nbBuffers << std::endl;
 }
 
 void OutlierDetectorBitterly::contribute(Point2 const& posFloat, float value) {
-    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
+    auto pos = discretePosition(posFloat);
+    if (!(pos.y < height && pos.x < width)) {
+        std::cout << pos.toString() << std::endl;
+    }
     assert(pos.y < height && pos.x < width);
 
     // If the value of the contribution is bigger than max_value we ignore it.
@@ -42,7 +45,7 @@ float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float v
 }   
 
 float OutlierDetectorBitterly::calculateWeight(Point2 const& posFloat, float value) const {
-    auto pos = Point2i(std::floor(posFloat.x), std::floor(posFloat.y));
+    auto pos = discretePosition(posFloat);
     assert(pos.y < height && pos.x < width);
 
     if (value > maxValue) {

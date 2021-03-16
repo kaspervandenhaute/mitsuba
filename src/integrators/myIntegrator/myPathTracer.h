@@ -7,6 +7,8 @@
 
 #include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
+#include "xxHash/xxhash.h"
+
 
 #include "outlierDetectors/outlierDetector.h"
 
@@ -125,7 +127,7 @@ public:
 
 private:
     /// Draw nChains samples from allSeeds proportional to their luminance. Samples can be chosen multiple times.
-    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains, Sampler* sampler) {
+    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains, Sampler* sampler) const {
         
         DiscreteDistribution seedDistribution(allSeeds.size());
         for (auto& seed : allSeeds) {
@@ -133,8 +135,6 @@ private:
         }
 
         seedDistribution.normalize();
-
-        // Log(EInfo, seedDistribution.toString().c_str());
 
         std::vector<PositionedPathSeed> seeds;
         seeds.reserve(nChains);
@@ -146,17 +146,16 @@ private:
             seeds.push_back(seed);                    
         }
         return seeds;
-
-        // std::vector<PositionedPathSeed> seeds;
-        // seeds.reserve(nChains);
-        // for (size_t i=0; i<nChains; i++) {
-        //     int index = std::floor(sampler->next1D() * allSeeds.size());
-        //     auto seed = allSeeds[index];
-        //     seed.pdf = 1.f/nChains;
-        //     seeds.push_back(seed); 
-        // }
-        // return seeds;
     }
+
+    inline uint64_t createSeed(Point2i const& pos) const {
+        int buffer[3] = {pos.x, pos.y, iteration};
+        // buffer[0] = pos.x;
+        // buffer[1] = pos.y;
+        // buffer[2] = iteration;
+        return (uint64_t) XXH3_64bits_withSeed((void*) buffer, sizeof(int)*3, 0);
+    }
+
 
 private:
     /// Used to temporarily cache a parallel process while it is in operation

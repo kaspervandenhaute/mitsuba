@@ -7,13 +7,12 @@
 
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/bidir/pathsampler.h>
-#include <mitsuba/bidir/rsampler.h>
 
 #include "myrenderproc.h"
 #include "utils/writeBitmap.h"
 #include "MutatablePssmltSampler.h"
 #include "my_pssmlt_proc.h"
-#include "xxHash/xxhash.h"
+#include "myRplSampler.h"
 
 #include "outlierDetectors/bitterli.h"
 #include "outlierDetectors/zirr1.h"
@@ -123,7 +122,7 @@ bool MyPathTracer::render(Scene *scene,
         mltSamplers[i]->decRef();
  
     // path tracer samplers
-    ref<ReplayableSampler> rplSampler = new ReplayableSampler();
+    ref<MyRplSampler> rplSampler = new MyRplSampler();
     std::vector<SerializableObject*> rplSamplers(sched->getCoreCount());
     for (size_t i=0; i<rplSamplers.size(); ++i) {
         ref<Sampler> clonedSampler = rplSampler->clone();

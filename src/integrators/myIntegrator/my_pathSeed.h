@@ -12,8 +12,8 @@ MTS_NAMESPACE_BEGIN
 //     Point2 position;
 //     Float pdf;
 
-//     inline PositionedPathSeed(Point2 position, size_t sampleIndex, Float luminance, Float pdf =0, int s = 0, int t = 0)
-//         : PathSeed(sampleIndex, luminance, s, t), position(position) {}
+//     inline PositionedPathSeed(Point2 position, size_t seed, Float luminance, Float pdf =0, int s = 0, int t = 0)
+//         : PathSeed(seed, luminance, s, t), position(position) {}
 
 //     inline PositionedPathSeed(Stream *stream) : PathSeed(stream) {
 //         Float x = stream->readFloat();
@@ -30,7 +30,7 @@ MTS_NAMESPACE_BEGIN
 //     std::string toString() const {
 //         std::ostringstream oss;
 //         oss << "PathSeed[" << endl
-//             << "  sampleIndex = " << sampleIndex << "," << endl
+//             << "  seed = " << seed << "," << endl
 //             << "  luminance = " << luminance << "," << endl
 //             << "  position = " << position.toString() << endl
 //             << "  s = " << s << "," << endl
@@ -41,7 +41,8 @@ MTS_NAMESPACE_BEGIN
 // };
 
 struct PositionedPathSeed {
-    size_t sampleIndex; ///< Index into a rewindable random number stream
+    size_t index;       ///< Index into a rewindable random number stream
+    uint64_t seed;      ///< Seed of the rng
     Float luminance;    ///< Luminance value of the path (for sanity checks)
     Point2 position;    ///< Position on screen
     Float pdf;          ///< The pdf with which the sample is chosen
@@ -50,11 +51,11 @@ struct PositionedPathSeed {
 
     inline PositionedPathSeed() { }
 
-    inline PositionedPathSeed(Point2 position, size_t sampleIndex, Float luminance, Float pdf =0, int s = 0, int t = 0)
-        : sampleIndex(sampleIndex), luminance(luminance), position(position), pdf(pdf), s(s), t(t) {}
+    inline PositionedPathSeed(Point2 position, uint64_t seed, size_t index, Float luminance, Float pdf =0, int s = 0, int t = 0)
+        : index(index), seed(seed), luminance(luminance), position(position), pdf(pdf), s(s), t(t) {}
 
     inline PositionedPathSeed(Stream *stream) {
-        sampleIndex = stream->readSize();
+        seed = stream->readSize();
         luminance = stream->readFloat();
         s = stream->readInt();
         t = stream->readInt(); 
@@ -65,7 +66,7 @@ struct PositionedPathSeed {
     }
 
     void serialize(Stream *stream) const {
-        stream->writeSize(sampleIndex);
+        stream->writeSize(seed);
         stream->writeFloat(luminance);
         stream->writeInt(s);
         stream->writeInt(t);
@@ -77,7 +78,7 @@ struct PositionedPathSeed {
     std::string toString() const {
         std::ostringstream oss;
         oss << "PathSeed[" << endl
-            << "  sampleIndex = " << sampleIndex << "," << endl
+            << "  seed = " << seed << "," << endl
             << "  luminance = " << luminance << "," << endl
             << "  position = " << position.toString() << endl
             << "  pdf = " << pdf << endl

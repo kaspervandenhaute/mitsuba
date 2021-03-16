@@ -22,6 +22,7 @@
 #include "MutatablePssmltSampler.h"
 #include "my_pathSeed.h"
 #include "myPathTracer.h"
+#include "myRplSampler.h"
 
 #include <string>
 
@@ -82,7 +83,7 @@ public:
         m_scene->wakeup(NULL, m_resources);
         m_scene->initializeBidirectional();
 
-        m_rplSampler = static_cast<ReplayableSampler*>(
+        m_rplSampler = static_cast<MyRplSampler*>(
             static_cast<Sampler *>(getResource("rplSampler"))->clone().get());
         m_sensorSampler = new MutatablePSSMLTSampler(m_origSampler);
         m_emitterSampler = new MutatablePSSMLTSampler(m_origSampler);
@@ -109,6 +110,12 @@ public:
 
         for (auto const& seed : seeds) {
 
+            /* Generate the initial sample by replaying the seeding random
+            number stream at the appropriate position. Afterwards, revert
+            back to this worker's own source of random numbers */
+
+            m_rplSampler->reSeed(seed.seed);
+
             m_emitterSampler->reset();
             m_sensorSampler->reset();
             m_directSampler->reset();
@@ -116,10 +123,7 @@ public:
             m_emitterSampler->setRandom(m_rplSampler->getRandom());
             m_directSampler->setRandom(m_rplSampler->getRandom());
 
-            /* Generate the initial sample by replaying the seeding random
-            number stream at the appropriate position. Afterwards, revert
-            back to this worker's own source of random numbers */
-            m_rplSampler->setSampleIndex(seed.sampleIndex +2); // +2 Because of setting the sensor samples manual.
+            m_rplSampler->setSampleIndex(seed.index +2); // +2 Because of setting the sensor samples manual.
 
             // Setting the sensor samples manual
             // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
@@ -150,7 +154,7 @@ public:
             regarding the use of random numbers during sample generation */
             if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.01) {
                 Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
-                    "= %f, but expected luminance = %f", seed.sampleIndex, current->luminance, seed.luminance);
+                    "= %f, but expected luminance = %f", seed.seed, current->luminance, seed.luminance);
                 return;
             }
 
@@ -293,7 +297,7 @@ private:
     ref<MutatablePSSMLTSampler> m_sensorSampler;
     ref<MutatablePSSMLTSampler> m_emitterSampler;
     ref<MutatablePSSMLTSampler> m_directSampler;
-    ref<ReplayableSampler> m_rplSampler;
+    ref<MyRplSampler> m_rplSampler;
     const OutlierDetector* m_outlierDetector;
 };
 
@@ -378,10 +382,11 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
 
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
 
+    // compute the number of seeds the new workunit will work on
     auto nSeeds = m_seeds.size() / m_config.workUnits;
     auto startSeed = nSeeds * m_workCounter;
     auto endSeed = std::min(startSeed + nSeeds, m_seeds.size());
-
+    // Assign the seeds 
     auto seeds = std::vector<PositionedPathSeed>(m_seeds.begin() + startSeed, m_seeds.begin() + endSeed);
 
     ++m_workCounter;

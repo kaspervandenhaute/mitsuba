@@ -193,7 +193,7 @@ bool MyPathTracer::render(Scene *scene,
                     // We dont need the original list any more. The seeds that will be used are copied to seeds.
                     pathSeeds.clear();
                 
-                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, m_config.workUnits, avgLuminance);
+                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, nbOfChains, avgLuminance);
 
                     ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult, detector);
                     process->bindResource("scene", sceneResID);
@@ -240,7 +240,7 @@ bool MyPathTracer::render(Scene *scene,
 
     film->addBitmap(mltResult);
 
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
     
     return true;
 }
@@ -267,14 +267,11 @@ size_t MyPathTracer::computeMltBudget() const {
 }
 
 void MyPathTracer::renderBlock(const Scene *scene,
-        const Sensor *sensor, Sampler *sampler, ImageBlock *block,
+        const Sensor *sensor, Sampler *_sampler, ImageBlock *block,
         const bool &stop, const std::vector<TPoint2<uint8_t>> &points) {
 
-
+    auto* sampler = (MyRplSampler*) _sampler;
     
-
-
-
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
@@ -293,15 +290,18 @@ void MyPathTracer::renderBlock(const Scene *scene,
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
             break;
+        
+        
+        auto seed = createSeed(offset);
+        sampler->reSeed(seed);
 
         sampler->generate(offset);
 
         for (size_t j = 0; j<samplesPerPixel; j++) {
+            
+            size_t index = sampler->getSampleIndex();
 
             splatList.clear();
-            auto index = sampler->getSampleIndex();
-            sampler->setSampleIndex(index);
-
             pathSampler->sampleSplats(offset, splatList);
 
             auto spec = splatList.splats[0].second;
@@ -331,9 +331,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
-                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance);
-                    // localPathSeeds.push_back(PositionedPathSeed(Point2(position.x * invSize.x, position.y * invSize.y), index, luminance));
-                    // Log(EInfo, "Position=[%f,%f]  index=%i", position.x, position.y, index);
+                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), seed, index, luminance);
+
+                    // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
                     nb_seeds++;
                 } 
             }

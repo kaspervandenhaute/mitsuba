@@ -13,11 +13,11 @@
 #include "utils/writeBitmap.h"
 #include "MutatablePssmltSampler.h"
 #include "my_pssmlt_proc.h"
+#include "xxHash/xxhash.h"
 
 #include "outlierDetectors/bitterli.h"
 #include "outlierDetectors/zirr1.h"
 #include "outlierDetectors/testDetector.h"
-
 
 
 
@@ -98,9 +98,9 @@ bool MyPathTracer::render(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
-    // detector = new TestOutlierDetector();
+    detector = new TestOutlierDetector();
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -270,6 +270,11 @@ size_t MyPathTracer::computeMltBudget() const {
 void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *sampler, ImageBlock *block,
         const bool &stop, const std::vector<TPoint2<uint8_t>> &points) {
+
+
+    
+
+
 
     SplatList splatList;
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,

@@ -186,7 +186,7 @@ public:
                 // TODO: works only for unidirectional
                 // Mlt integrates f(u) * w with w == 0 || w == 1
                 float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
-                
+                // multiply f(u) with w
                 for (auto& splat : proposed->splats) {
                     splat.second *= w;
                 }
@@ -225,9 +225,6 @@ public:
                         Spectrum value = current->getValue(k);
                         value *= correction * cumulativeWeight;
                         if (!value.isZero()) {
-                            // Log(EInfo, value.toString().c_str());
-                            // value /= current->luminance;
-                            // value /= luminance;
                             result->put(current->getPosition(k), &value[0]);
                         }
                     }
@@ -250,9 +247,6 @@ public:
                         Spectrum value = proposed->getValue(k);
                         value *= proposedWeight * correction;
                         if (!value.isZero()) {
-                            // Log(EInfo, value.toString().c_str());
-                            // value /= current->luminance;
-                            // value /= luminance;
                             result->put(proposed->getPosition(k), &value[0]);
                         }
                     }
@@ -270,9 +264,6 @@ public:
                 Spectrum value = current->getValue(k);
                 value *= correction * cumulativeWeight;
                 if (!value.isZero()) {
-                    // Log(EInfo, value.toString().c_str());
-                    // value /= current->luminance;
-                    // value /= luminance;
                     result->put(current->getPosition(k), &value[0]);
                 }
             }
@@ -328,26 +319,12 @@ void PSSMLTProcess::develop() {
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
     Spectrum *target = (Spectrum *) m_developBuffer->getData();
 
-/* Compute the luminance correction factor */
-    // Float avgLuminance = 0;
-   
-    // for (size_t i=0; i<pixelCount; ++i)
-    //     avgLuminance += accum[i].getLuminance();
-
-    // avgLuminance /= (Float) pixelCount;
-    // Float luminanceFactor = m_config.luminance / avgLuminance;
-
-    // for (size_t i=0; i<pixelCount; ++i) {
-    //     Float correction = luminanceFactor;
-    //     Spectrum value = accum[i] * correction;
-    //     target[i] = value;
-    // }
-
+    auto invBudget = 1.f/(m_seeds.size() * m_config.nMutations);
 
     // TODO: can be skipped?
     for (size_t i=0; i<pixelCount; ++i) {
         // Normalise for the mlt budget (nb of mlt samples), see formula 9 selective mlt
-        target[i] = accum[i] /mlt_budget;
+        target[i] = accum[i] * invBudget;
         // std::cout << (target[i] * (1.f/mlt_budget)).toString() << std::endl;
     }
     
@@ -383,9 +360,22 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
 
     // compute the number of seeds the new workunit will work on
-    auto nSeeds = m_seeds.size() / m_config.workUnits;
+    int nSeeds = m_seeds.size() / m_config.workUnits;
+    int rest = m_seeds.size() % m_config.workUnits;
     auto startSeed = nSeeds * m_workCounter;
-    auto endSeed = std::min(startSeed + nSeeds, m_seeds.size());
+    auto endSeed = startSeed + nSeeds;
+
+    // We add one seed to the first rest workunits to have the best possible spread of work
+    // This means that all subcequent places need to be shifted
+    if (m_workCounter < rest) {
+        endSeed += m_workCounter +1;
+        startSeed += m_workCounter;
+    } else {
+        endSeed += rest;
+        startSeed += rest;
+    }
+
+    assert(endSeed <= m_seeds.size());
     // Assign the seeds 
     auto seeds = std::vector<PositionedPathSeed>(m_seeds.begin() + startSeed, m_seeds.begin() + endSeed);
 

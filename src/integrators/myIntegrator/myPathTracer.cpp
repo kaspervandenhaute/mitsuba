@@ -183,7 +183,7 @@ bool MyPathTracer::render(Scene *scene,
                 mltBudget = nbOfChains * m_config.nMutations;
 
                 if (nbOfChains > 0) {
-                    m_config.workUnits = std::min(nCores*4, nbOfChains);
+                    m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
 
                     // Pick seeds proportional to their luminance
                     auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
@@ -320,16 +320,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
             if (iteration != 0) {
                 auto weight = detector->calculateWeight(position, luminance);
 
-                // All inliers
-                // weight = 0;
-
-                // All outliers
-                if (luminance > 0) {
-                    weight = 1;
-                } else {
-                    weight = 0;
-                }
-                
                 weightedAvg.put(weight*luminance);
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);

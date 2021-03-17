@@ -57,7 +57,6 @@ private:
     RenderQueue *m_queue;
     const PSSMLTConfiguration &m_config;
     const Bitmap *m_directImage;
-    ref<Bitmap> m_developBuffer;
     ImageBlock *m_accum;
     ProgressReporter *m_progress;
     const std::vector<PositionedPathSeed> &m_seeds;

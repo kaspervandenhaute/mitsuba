@@ -106,6 +106,10 @@ public:
         const std::vector<PositionedPathSeed> &seeds = wu->getSeeds();
         SplatList *current = new SplatList(), *proposed = new SplatList();
 
+        ref<Timer> timer = new Timer();
+
+        result->clear();
+
         // Log(EInfo, "rplSamplerIndex: %i", m_rplSampler->getSampleIndex());
 
         for (auto const& seed : seeds) {
@@ -133,8 +137,6 @@ public:
             // Log(EInfo, "position=[%f, %f]  index=%i", seed.position.x *200, seed.position.y *200, seed.sampleIndex);
 
             m_pathSampler->sampleSplats(Point2i(-1), *current);
-
-            result->clear();
 
             ref<Random> random = m_origSampler->getRandom();
             m_sensorSampler->setRandom(random);
@@ -169,8 +171,6 @@ public:
             // Luminance correction f(u(0))/pmf(u(0)), see formula 9 in selective mlt
             auto correction = seed.luminance / seed.pdf;
 
-            ref<Timer> timer = new Timer();
-
             /* MLT main loop */
             Float cumulativeWeight = 0;
             current->normalize(m_config.importanceMap);
@@ -185,7 +185,7 @@ public:
 
                 // TODO: works only for unidirectional
                 // Mlt integrates f(u) * w with w == 0 || w == 1
-                float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
+                Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
                 // multiply f(u) with w
                 for (auto& splat : proposed->splats) {
                     splat.second *= w;
@@ -267,6 +267,8 @@ public:
                     result->put(current->getPosition(k), &value[0]);
                 }
             }
+            current->clear();
+            proposed->clear();
         }
 
         delete current;
@@ -317,18 +319,14 @@ void PSSMLTProcess::develop() {
     LockGuard lock(m_resultMutex);
     size_t pixelCount = m_accum->getBitmap()->getPixelCount();
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
-    Spectrum *target = (Spectrum *) m_developBuffer->getData();
+    Spectrum *target = (Spectrum *) mlt_result->getData();
 
-    auto invBudget = 1.f/(m_seeds.size() * m_config.nMutations);
+    auto invBudget = 1.f/mlt_budget;
 
-    // TODO: can be skipped?
     for (size_t i=0; i<pixelCount; ++i) {
         // Normalise for the mlt budget (nb of mlt samples), see formula 9 selective mlt
-        target[i] = accum[i] * invBudget;
-        // std::cout << (target[i] * (1.f/mlt_budget)).toString() << std::endl;
+        target[i] += accum[i] * invBudget;
     }
-    
-    mlt_result->accumulate(m_developBuffer);
 
     m_refreshTimer->reset();
     m_queue->signalRefresh(m_job);
@@ -395,7 +393,6 @@ void PSSMLTProcess::bindResource(const std::string &name, int id) {
         m_progress = new ProgressReporter("Rendering", m_config.workUnits, m_job);
         m_accum = new ImageBlock(Bitmap::ESpectrum, m_film->getCropSize());
         m_accum->clear();
-        m_developBuffer = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, m_film->getCropSize());
     }
 }
 

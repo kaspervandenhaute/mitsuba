@@ -177,7 +177,10 @@ bool MyPathTracer::render(Scene *scene,
                 auto mltBudget = computeMltBudget();
                 // if there are seeds, samples have been discarded. They need to be put back
                 auto nbOfChains = std::max(mltBudget / m_config.nMutations, (size_t) 1);
-                nbOfChains = std::min(nbOfChains, samplesTotal * m_config.nMutations);
+                nbOfChains = std::min(nbOfChains, (size_t) 100); //TODO
+
+                // actual mlt budget
+                mltBudget = nbOfChains * m_config.nMutations;
 
                 if (nbOfChains > 0) {
                     m_config.workUnits = std::min(nCores*4, nbOfChains);
@@ -291,7 +294,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
         if (stop)
             break;
         
-        
+        // hash function is only needed for repeatability
         auto seed = createSeed(offset);
         sampler->reSeed(seed);
 
@@ -321,11 +324,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 // weight = 0;
 
                 // All outliers
-                // if (luminance > 0) {
-                //     weight = 1;
-                // } else {
-                //     weight = 0;
-                // }
+                if (luminance > 0) {
+                    weight = 1;
+                } else {
+                    weight = 0;
+                }
                 
                 weightedAvg.put(weight*luminance);
                 
@@ -335,7 +338,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
                     // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
                     nb_seeds++;
-                } 
+                }
             }
 
             sampler->advance();

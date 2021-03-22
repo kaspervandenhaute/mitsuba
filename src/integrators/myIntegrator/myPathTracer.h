@@ -5,12 +5,11 @@
 
 #include <string>
 
-#include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
 #include "xxHash/xxhash.h"
 
-
 #include "outlierDetectors/outlierDetector.h"
+#include "myPSSMLTconfig.h"
 
 
 #ifndef MY_PATH_TRACER
@@ -150,9 +149,6 @@ private:
 
     inline uint64_t createSeed(Point2i const& pos) const {
         int buffer[3] = {pos.x, pos.y, iteration};
-        // buffer[0] = pos.x;
-        // buffer[1] = pos.y;
-        // buffer[2] = iteration;
         return (uint64_t) XXH3_64bits_withSeed((void*) buffer, sizeof(int)*3, 0);
     }
 
@@ -160,7 +156,7 @@ private:
 private:
     /// Used to temporarily cache a parallel process while it is in operation
     ref<ParallelProcess> m_process;
-    PSSMLTConfiguration m_config;
+    MYPSSMLTConfiguration m_config;
     std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
@@ -174,6 +170,7 @@ private:
     Float outlierDetectorThreshold;
     int intermediatePeriod;
     std::string intermediatePath;
+    ref<Random> random;
 };
 
 MTS_NAMESPACE_END

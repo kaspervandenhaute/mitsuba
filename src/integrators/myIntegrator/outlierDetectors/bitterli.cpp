@@ -8,7 +8,6 @@ MTS_NAMESPACE_BEGIN
 OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue) :
         width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta), maxValue(maxValue), minValue(0.5),
         buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0) {
-        std::cout << nbBuffers << std::endl;
 }
 
 void OutlierDetectorBitterly::contribute(Point2 const& posFloat, float value) {

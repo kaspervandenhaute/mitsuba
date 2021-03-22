@@ -19,7 +19,7 @@
 #include <mitsuba/bidir/util.h>
 #include <mitsuba/bidir/path.h>
 #include "my_pssmlt_proc.h"
-#include "MutatablePssmltSampler.h"
+#include "myPssmltSampler.h"
 #include "my_pathSeed.h"
 #include "myPathTracer.h"
 #include "myRplSampler.h"
@@ -44,13 +44,13 @@ StatsCounter forcedAcceptance("Primary sample space MLT",
 
 class PSSMLTRenderer : public WorkProcessor {
 public:
-    PSSMLTRenderer(const PSSMLTConfiguration &conf, OutlierDetector const* outlierDetector)
+    PSSMLTRenderer(const MYPSSMLTConfiguration &conf, OutlierDetector const* outlierDetector)
         : m_config(conf), m_outlierDetector(outlierDetector) {
     }
 
     PSSMLTRenderer(Stream *stream, InstanceManager *manager)
         : WorkProcessor(stream, manager) {
-        m_config = PSSMLTConfiguration(stream);
+        m_config = MYPSSMLTConfiguration(stream);
     }
 
     void serialize(Stream *stream, InstanceManager *manager) const {
@@ -71,7 +71,7 @@ public:
         // Log(EInfo, "Preparing");
 
         Scene *scene = static_cast<Scene*>(getResource("scene"));
-        m_origSampler = static_cast<MutatablePSSMLTSampler*>(getResource("sampler"));
+        m_origSampler = static_cast<MyPSSMLTSampler*>(getResource("sampler"));
         m_sensor = static_cast<Sensor *>(getResource("sensor"));
         m_scene = new Scene(scene);
         m_film = m_sensor->getFilm();
@@ -85,9 +85,9 @@ public:
 
         m_rplSampler = static_cast<MyRplSampler*>(
             static_cast<Sampler *>(getResource("rplSampler"))->clone().get());
-        m_sensorSampler = new MutatablePSSMLTSampler(m_origSampler);
-        m_emitterSampler = new MutatablePSSMLTSampler(m_origSampler);
-        m_directSampler = new MutatablePSSMLTSampler(m_origSampler);
+        m_sensorSampler = new MyPSSMLTSampler(m_origSampler);
+        m_emitterSampler = new MyPSSMLTSampler(m_origSampler);
+        m_directSampler = new MyPSSMLTSampler(m_origSampler);
 
         m_pathSampler = new PathSampler(m_config.technique, m_scene,
             m_emitterSampler, m_sensorSampler, m_directSampler, m_config.maxDepth,
@@ -131,8 +131,8 @@ public:
 
             // Setting the sensor samples manual
             // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
-            ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(0, seed.position.x);
-            ((MutatablePSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(1, seed.position.y);
+            ((MyPSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(0, seed.position.x);
+            ((MyPSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(1, seed.position.y);
 
             // Log(EInfo, "position=[%f, %f]  index=%i", seed.position.x *200, seed.position.y *200, seed.sampleIndex);
 
@@ -154,7 +154,7 @@ public:
             /* Sanity check -- the luminance should match the one from
             the warmup phase - an error here would indicate inconsistencies
             regarding the use of random numbers during sample generation */
-            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.01) {
+            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.1) {
                 Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                     "= %f, but expected luminance = %f", seed.seed, current->luminance, seed.luminance);
                 return;
@@ -173,7 +173,8 @@ public:
 
             /* MLT main loop */
             Float cumulativeWeight = 0;
-            current->normalize(m_config.importanceMap);
+            ref<Bitmap> dummy;
+            current->normalize(nullptr);
             for (uint64_t mutationCtr=0; mutationCtr<m_config.nMutations && !stop; ++mutationCtr) {
                 if (wu->getTimeout() > 0 && (mutationCtr % 8192) == 0
                         && (int) timer->getMilliseconds() > wu->getTimeout())
@@ -181,7 +182,7 @@ public:
 
                 m_pathSampler->sampleSplats(Point2i(-1), *proposed);
                 // This does the normalisation of dividing by the luminance
-                proposed->normalize(m_config.importanceMap);
+                proposed->normalize(nullptr);
 
                 // TODO: works only for unidirectional
                 // Mlt integrates f(u) * w with w == 0 || w == 1
@@ -281,15 +282,15 @@ public:
 
     MTS_DECLARE_CLASS()
 private:
-    PSSMLTConfiguration m_config;
+    MYPSSMLTConfiguration m_config;
     ref<Scene> m_scene;
     ref<Sensor> m_sensor;
     ref<Film> m_film;
     ref<PathSampler> m_pathSampler;
-    ref<MutatablePSSMLTSampler> m_origSampler;
-    ref<MutatablePSSMLTSampler> m_sensorSampler;
-    ref<MutatablePSSMLTSampler> m_emitterSampler;
-    ref<MutatablePSSMLTSampler> m_directSampler;
+    ref<MyPSSMLTSampler> m_origSampler;
+    ref<MyPSSMLTSampler> m_sensorSampler;
+    ref<MyPSSMLTSampler> m_emitterSampler;
+    ref<MyPSSMLTSampler> m_directSampler;
     ref<MyRplSampler> m_rplSampler;
     const OutlierDetector* m_outlierDetector;
 };
@@ -299,7 +300,7 @@ private:
 /* ==================================================================== */
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
-    const PSSMLTConfiguration &conf, const Bitmap *directImage,
+    const MYPSSMLTConfiguration &conf, const Bitmap *directImage,
     const std::vector<PositionedPathSeed> &seeds, size_t mltBudget, Bitmap* mltResult, OutlierDetector const* outlierDetector) : m_job(parent), m_queue(queue),
         m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_budget(mltBudget), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
     m_directImage = directImage;

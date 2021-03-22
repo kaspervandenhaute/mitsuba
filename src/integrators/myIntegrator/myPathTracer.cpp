@@ -10,7 +10,7 @@
 
 #include "myrenderproc.h"
 #include "utils/writeBitmap.h"
-#include "MutatablePssmltSampler.h"
+#include "myPssmltSampler.h"
 #include "my_pssmlt_proc.h"
 #include "myRplSampler.h"
 
@@ -28,16 +28,7 @@ MyPathTracer::MyPathTracer(const Properties &props)
         m_config.rrDepth = props.getInteger("rrDepth", 5);
         m_config.technique = props.getBoolean("bidirectional", false) ?
             PathSampler::EBidirectional : PathSampler::EUnidirectional;
-        m_config.twoStage = props.getBoolean("twoStage", false);
-        m_config.firstStageSizeReduction = props.getInteger(
-            "firstStageSizeReduction", 16);
-        m_config.firstStage= props.getBoolean("firstStage", false);
-        m_config.luminanceSamples = props.getInteger("luminanceSamples", 0);
-        m_config.pLarge = props.getFloat("pLarge", 0.f);
-        m_config.directSamples = props.getInteger("directSamples", -1);
-        m_config.separateDirect = m_config.directSamples >= 0;
-        m_config.kelemenStyleWeights = props.getBoolean("kelemenStyleWeights", true);
-        m_config.directSampling = props.getBoolean("directSampling", false);
+
         m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
         m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
         Assert(m_config.mutationSizeLow > 0 && m_config.mutationSizeHigh > 0 &&
@@ -54,6 +45,8 @@ MyPathTracer::MyPathTracer(const Properties &props)
         if (intermediatePeriod > 0) {
             intermediatePath = props.getString("intermediatePath");
         }
+
+        random = new Random();
 
         seedMutex = new Mutex();
   }
@@ -109,8 +102,11 @@ bool MyPathTracer::render(Scene *scene,
 
     ref<Bitmap> directImage;
 
+    // for (int loop=2; loop<21; ++loop) {
+    //     iterations = std::pow(10, loop * std::log(1000)/std::log(10) /20);
+
     // mlt samplers
-    ref<MutatablePSSMLTSampler> mltSampler = new MutatablePSSMLTSampler(m_config);
+    ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
     std::vector<SerializableObject *> mltSamplers(sched->getCoreCount());
     for (size_t i=0; i<mltSamplers.size(); ++i) {
         ref<Sampler> clonedSampler = mltSampler->clone();
@@ -141,7 +137,7 @@ bool MyPathTracer::render(Scene *scene,
 
     for (iteration=0; iteration<iterations; ++iteration) {
 
-        Log(EInfo, "Starting on path tracing in iteration %i", iteration);
+        // Log(EInfo, "Starting on path tracing in iteration %i", iteration);
 
 
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
@@ -170,14 +166,12 @@ bool MyPathTracer::render(Scene *scene,
             }
             size_t nb_seeds = pathSeeds.size();
             avgLuminance /= nb_seeds;
-            m_config.luminance = avgLuminance;
 
             if (nb_seeds > 0) {
                 // mlt budget is nb chains * nb mutations
                 auto mltBudget = computeMltBudget();
                 // if there are seeds, samples have been discarded. They need to be put back
                 auto nbOfChains = std::max(mltBudget / m_config.nMutations, (size_t) 1);
-                nbOfChains = std::min(nbOfChains, (size_t) 100); //TODO
 
                 // actual mlt budget
                 mltBudget = nbOfChains * m_config.nMutations;
@@ -223,28 +217,26 @@ bool MyPathTracer::render(Scene *scene,
             detector->update((iteration+1) * samplesPerPixel);
         }
 
-        // film->addBitmap(mltResult, 1.f/iterations);
-        // mltResult->clear();
-
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
-            // film->setDestinationFile(intermediatePath + std::to_string(iteration) + ".exr", scene->getBlockSize());
-            // film->develop(scene, 0);
             auto intermediate = mltResult->clone();
             intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
             intermediate->scale(1.f/iteration);
             BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
         }
     }
-    sched->unregisterResource(rplSamplerResID);
-    sched->unregisterResource(integratorResID);
-
-    mltResult->scale(1.f/iterations);
+    
     mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
+    mltResult->scale(1.f/iterations);
+    // BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(iterations) + ".exr");
 
     film->addBitmap(mltResult);
 
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/c/Users/beast/Documents/00-School/master/thesis/prentjes/first-tests/mlt.png");
-    
+    mltResult->clear();
+    pathResult->clear();
+
+    sched->unregisterResource(rplSamplerResID);
+    sched->unregisterResource(integratorResID);
+    // }
     return true;
 }
 
@@ -260,13 +252,12 @@ void MyPathTracer::wakeup(ConfigurableObject *parent,
 size_t MyPathTracer::computeMltBudget() const {
     Float r = weightedAvg.get() / unweightedAvg.get();
     // When all samples are outliers r will be close to 1
-    if (r >= 0.95 && r <= 1.05) {
-        return samplesTotal * m_config.nMutations;
-    } else if (r >= 1.05) {
+    if (r >= 0.99 && r <= 1.01) {
+        return samplesTotal;
+    } else if (r >= 1.01) {
         return 0;
     }
     return samplesTotal * r / (1-r);
-    // return samplesTotal;
 }
 
 void MyPathTracer::renderBlock(const Scene *scene,
@@ -295,7 +286,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
             break;
         
         // hash function is only needed for repeatability
-        auto seed = createSeed(offset);
+        // auto seed = createSeed(offset);
+        auto seed = random->nextULong();
         sampler->reSeed(seed);
 
         sampler->generate(offset);

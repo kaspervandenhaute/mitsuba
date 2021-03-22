@@ -23,9 +23,9 @@
 #include <mitsuba/render/renderjob.h>
 #include <mitsuba/core/statistics.h>
 #include <mitsuba/core/bitmap.h>
-#include "../pssmlt/pssmlt.h"
 #include "my_pathSeed.h"
 #include "outlierDetectors/outlierDetector.h"
+#include "myPSSMLTconfig.h"
 
 MTS_NAMESPACE_BEGIN
 
@@ -37,7 +37,7 @@ MTS_NAMESPACE_BEGIN
 class PSSMLTProcess : public ParallelProcess {
 public:
     PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
-        const PSSMLTConfiguration &config, const Bitmap *directImage,
+        const MYPSSMLTConfiguration &config, const Bitmap *directImage,
         const std::vector<PositionedPathSeed> &seeds, size_t mlt_budget, Bitmap* mltResult, OutlierDetector const* outlierDetector);
 
     void develop();
@@ -55,7 +55,7 @@ protected:
 private:
     ref<const RenderJob> m_job;
     RenderQueue *m_queue;
-    const PSSMLTConfiguration &m_config;
+    const MYPSSMLTConfiguration &m_config;
     const Bitmap *m_directImage;
     ImageBlock *m_accum;
     ProgressReporter *m_progress;

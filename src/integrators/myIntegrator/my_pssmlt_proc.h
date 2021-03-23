@@ -38,7 +38,7 @@ class PSSMLTProcess : public ParallelProcess {
 public:
     PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
         const MYPSSMLTConfiguration &config, const Bitmap *directImage,
-        const std::vector<PositionedPathSeed> &seeds, size_t mlt_budget, Bitmap* mltResult, OutlierDetector const* outlierDetector);
+        const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector);
 
     void develop();
 
@@ -65,7 +65,6 @@ private:
     int m_resultCounter, m_workCounter;
     unsigned int m_refreshTimeout;
     ref<Timer> m_timeoutTimer, m_refreshTimer;
-    size_t mlt_budget;
     ref<Bitmap> mlt_result;
     const OutlierDetector* m_outlierDetector;
 };

@@ -301,8 +301,8 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const MYPSSMLTConfiguration &conf, const Bitmap *directImage,
-    const std::vector<PositionedPathSeed> &seeds, size_t mltBudget, Bitmap* mltResult, OutlierDetector const* outlierDetector) : m_job(parent), m_queue(queue),
-        m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_budget(mltBudget), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
+    const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector) : m_job(parent), m_queue(queue),
+        m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
     m_directImage = directImage;
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();
@@ -322,7 +322,7 @@ void PSSMLTProcess::develop() {
     const Spectrum *accum = (Spectrum *) m_accum->getBitmap()->getData();
     Spectrum *target = (Spectrum *) mlt_result->getData();
 
-    auto invBudget = 1.f/mlt_budget;
+    auto invBudget = 1.f/(m_seeds.size()*m_config.nMutations);
 
     for (size_t i=0; i<pixelCount; ++i) {
         // Normalise for the mlt budget (nb of mlt samples), see formula 9 selective mlt

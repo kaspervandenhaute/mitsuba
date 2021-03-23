@@ -90,9 +90,9 @@ bool MyPathTracer::render(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
-    detector = new TestOutlierDetector();
+    // detector = new TestOutlierDetector();
 
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -102,8 +102,8 @@ bool MyPathTracer::render(Scene *scene,
 
     ref<Bitmap> directImage;
 
-    // for (int loop=2; loop<21; ++loop) {
-    //     iterations = std::pow(10, loop * std::log(1000)/std::log(10) /20);
+    for (int loop=2; loop<21; ++loop) {
+        iterations = std::pow(10, loop * std::log(1000)/std::log(10) /20);
 
     // mlt samplers
     ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
@@ -186,13 +186,13 @@ bool MyPathTracer::render(Scene *scene,
 
                     // Multiple seeds per work unit
                     assert(seeds.size() >= (size_t) m_config.workUnits);
+                
+                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
 
                     // We dont need the original list any more. The seeds that will be used are copied to seeds.
                     pathSeeds.clear();
-                
-                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds. Avg luminance is %f.", iteration, nbOfChains, avgLuminance);
 
-                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltBudget, mltResult, detector);
+                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltResult, detector);
                     process->bindResource("scene", sceneResID);
                     process->bindResource("sensor", sensorResID);
                     process->bindResource("sampler", mltSamplerResID);
@@ -217,17 +217,19 @@ bool MyPathTracer::render(Scene *scene,
             detector->update((iteration+1) * samplesPerPixel);
         }
 
-        if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
-            auto intermediate = mltResult->clone();
-            intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
-            intermediate->scale(1.f/iteration);
-            BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
-        }
+        // if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
+        //     auto intermediate = mltResult->clone();
+        //     intermediate->scale(1.f/samplesPerPixel); //TODO: Why?
+        //     intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
+        //     intermediate->scale(1.f/iteration);
+        //     BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
+        // }
     }
     
+    mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
     mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
     mltResult->scale(1.f/iterations);
-    // BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(iterations) + ".exr");
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(iterations) + ".exr");
 
     film->addBitmap(mltResult);
 
@@ -236,7 +238,7 @@ bool MyPathTracer::render(Scene *scene,
 
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
-    // }
+    }
     return true;
 }
 
@@ -266,7 +268,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     auto* sampler = (MyRplSampler*) _sampler;
     
-    SplatList splatList;
+    
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
             false, false, false);
@@ -284,17 +286,19 @@ void MyPathTracer::renderBlock(const Scene *scene,
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
             break;
-        
-        // hash function is only needed for repeatability
-        // auto seed = createSeed(offset);
-        auto seed = random->nextULong();
-        sampler->reSeed(seed);
 
         sampler->generate(offset);
 
         for (size_t j = 0; j<samplesPerPixel; j++) {
+
+            // hash function is only needed for repeatability
+            // auto seed = createSeed(offset);
+            auto seed = random->nextULong();
+            sampler->reSeed(seed);
             
             size_t index = sampler->getSampleIndex();
+
+            SplatList splatList;
 
             splatList.clear();
             pathSampler->sampleSplats(offset, splatList);
@@ -303,7 +307,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
             auto position = splatList.splats[0].first;
             auto luminance = splatList.luminance;
 
-            // // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
+            // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
             
             detector->contribute(position, luminance);
             
@@ -327,11 +331,10 @@ void MyPathTracer::renderBlock(const Scene *scene,
         }
     }
 
-    LockGuard lock(seedMutex);
+    LockGuard lock(seedMutex); // pathSeeds and pathResult are shared by all threads
     pathResult->put(block);
 
     if (!localPathSeeds.empty()) {
-        LockGuard lock(seedMutex); // pathSeeds is shared by all threads
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
     }
 }

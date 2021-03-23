@@ -300,10 +300,9 @@ private:
 /* ==================================================================== */
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
-    const MYPSSMLTConfiguration &conf, const Bitmap *directImage,
+    const MYPSSMLTConfiguration &conf,
     const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector) : m_job(parent), m_queue(queue),
         m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
-    m_directImage = directImage;
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();
     m_resultMutex = new Mutex();

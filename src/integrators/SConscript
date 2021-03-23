@@ -47,13 +47,13 @@ myEnv = bidirEnv.Clone()
 # myEnv.Append(LIBS=['pssmlt'])
 # myEnv.Append(LIBPATH=['#src/integrators/pssmlt'])
 
-plugins += myEnv.SharedLibrary('myintegrator', ['myIntegrator/myPathTracer.cpp',
+plugins += myEnv.SharedLibrary('myIntegrator', ['myIntegrator/myPathTracer.cpp',
 											    'myIntegrator/myrenderproc.cpp', 
 											    'myIntegrator/my_pssmlt_proc.cpp',
 											    'myIntegrator/outlierDetectors/bitterli.cpp',
 											    'myIntegrator/outlierDetectors/zirr1.cpp',
 											    'myIntegrator/outlierDetectors/testDetector.cpp',
-											    'myIntegrator/myPssmltSampler.cpp'								
+											    'myIntegrator/myPssmltSampler.cpp',
 											     ]);
 
 

@@ -23,50 +23,23 @@
 MTS_NAMESPACE_BEGIN
 
 MyPathTracer::MyPathTracer(const Properties &props)
- : Integrator(props) {
-        m_config.maxDepth = props.getInteger("maxDepth", -1);
-        m_config.rrDepth = props.getInteger("rrDepth", 5);
-        m_config.technique = props.getBoolean("bidirectional", false) ?
-            PathSampler::EBidirectional : PathSampler::EUnidirectional;
+ : Integrator(props), props(props) {
 
-        m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
-        m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
-        Assert(m_config.mutationSizeLow > 0 && m_config.mutationSizeHigh > 0 &&
-               m_config.mutationSizeLow < 1 && m_config.mutationSizeHigh < 1 &&
-               m_config.mutationSizeLow < m_config.mutationSizeHigh);
-        m_config.workUnits = props.getInteger("workUnits", -1);
-        /* Stop MLT after X seconds -- useful for equal-time comparisons */
-        m_config.timeout = props.getInteger("timeout", 0);
+        // Test options
+        nPoints = props.getInteger("points", 20);
+        nSubPoints = props.getInteger("subpoints", 10);
+        
+        testProperty = props.getString("testProperty", "iterations");
+        exponential = props.getBoolean("exponentialTest", true);
+        minValue = props.getFloat("minValue", 0);
+        maxValue = props.getFloat("maxValue", 1000);
 
-        iterations = props.getInteger("iterations", 10);
-        noMlt = props.getBoolean("noMlt", false);
-        outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);
-        intermediatePeriod = props.getInteger("intermediatePeriod", -1);
-        if (intermediatePeriod > 0) {
-            intermediatePath = props.getString("intermediatePath");
-        }
-
-        random = new Random();
-
-        seedMutex = new Mutex();
-  }
-
-MyPathTracer::MyPathTracer(Stream *stream, InstanceManager *manager)
- : Integrator(stream, manager) { 
-        seedMutex = new Mutex();
+        init();
 
   }
 
-void MyPathTracer::serialize(Stream *stream, InstanceManager *manager) const {
-    Integrator::serialize(stream, manager);
-}
 
-void MyPathTracer::cancel() {
-    if (m_process)
-        Scheduler::getInstance()->cancel(m_process);
-}
-
-bool MyPathTracer::render(Scene *scene,
+bool MyPathTracer::myRender(Scene *scene,
         RenderQueue *queue, const RenderJob *job,
         int sceneResID, int sensorResID, int samplerResID) {
     ref<Scheduler> sched = Scheduler::getInstance();
@@ -94,16 +67,11 @@ bool MyPathTracer::render(Scene *scene,
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
     // detector = new TestOutlierDetector();
 
-
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
         " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
         samplesPerPixel, samplesPerPixel == 1 ? "sample" : "samples", nCores,
         nCores == 1 ? "core" : "cores");
 
-    ref<Bitmap> directImage;
-
-    for (int loop=2; loop<21; ++loop) {
-        iterations = std::pow(10, loop * std::log(1000)/std::log(10) /20);
 
     // mlt samplers
     ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
@@ -153,6 +121,8 @@ bool MyPathTracer::render(Scene *scene,
         m_process = proc;
         sched->wait(proc);
         m_process = NULL;
+
+        cost += samplesTotal;
         
 
         if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
@@ -176,6 +146,8 @@ bool MyPathTracer::render(Scene *scene,
                 // actual mlt budget
                 mltBudget = nbOfChains * m_config.nMutations;
 
+                cost += mltBudget;
+
                 if (nbOfChains > 0) {
                     m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
 
@@ -192,7 +164,7 @@ bool MyPathTracer::render(Scene *scene,
                     // We dont need the original list any more. The seeds that will be used are copied to seeds.
                     pathSeeds.clear();
 
-                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, directImage, seeds, mltResult, detector);
+                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
                     process->bindResource("scene", sceneResID);
                     process->bindResource("sensor", sensorResID);
                     process->bindResource("sampler", mltSamplerResID);
@@ -208,7 +180,7 @@ bool MyPathTracer::render(Scene *scene,
                     process->develop();
 
 
-                    if (proc->getReturnStatus() != ParallelProcess::ESuccess) {
+                    if (process->getReturnStatus() != ParallelProcess::ESuccess) {
                         Log(EError, "Error while mlting.");
                     }    
                 }
@@ -217,38 +189,30 @@ bool MyPathTracer::render(Scene *scene,
             detector->update((iteration+1) * samplesPerPixel);
         }
 
-        // if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
-        //     auto intermediate = mltResult->clone();
-        //     intermediate->scale(1.f/samplesPerPixel); //TODO: Why?
-        //     intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
-        //     intermediate->scale(1.f/iteration);
-        //     BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(iteration) + ".exr");
-        // }
+        if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
+            auto intermediate = mltResult->clone();
+            intermediate->scale(1.f/samplesPerPixel); //TODO: Why?
+            intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
+            intermediate->scale(1.f/iteration);
+            BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
+        }
     }
     
     mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
     mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
     mltResult->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(iterations) + ".exr");
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
 
     film->addBitmap(mltResult);
 
     mltResult->clear();
     pathResult->clear();
+    cost = 0;
 
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
-    }
+    
     return true;
-}
-
-void MyPathTracer::bindUsedResources(ParallelProcess *) const {
-    /* Do nothing by default */
-}
-
-void MyPathTracer::wakeup(ConfigurableObject *parent,
-    std::map<std::string, SerializableObject *> &) {
-    /* Do nothing by default */
 }
 
 size_t MyPathTracer::computeMltBudget() const {
@@ -337,6 +301,61 @@ void MyPathTracer::renderBlock(const Scene *scene,
     if (!localPathSeeds.empty()) {
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
     }
+}
+
+void MyPathTracer::init() {
+        m_config.maxDepth = props.getInteger("maxDepth", -1);
+        m_config.rrDepth = props.getInteger("rrDepth", 5);
+        m_config.technique = props.getBoolean("bidirectional", false) ?
+            PathSampler::EBidirectional : PathSampler::EUnidirectional;
+
+        m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
+        m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
+        Assert(m_config.mutationSizeLow > 0 && m_config.mutationSizeHigh > 0 &&
+               m_config.mutationSizeLow < 1 && m_config.mutationSizeHigh < 1 &&
+               m_config.mutationSizeLow < m_config.mutationSizeHigh);
+        m_config.workUnits = props.getInteger("workUnits", -1);
+        /* Stop MLT after X seconds -- useful for equal-time comparisons */
+        m_config.timeout = props.getInteger("timeout", 0);
+
+        iterations = props.getInteger("iterations", 10);
+        noMlt = props.getBoolean("noMlt", false);
+        outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);
+        intermediatePeriod = props.getInteger("intermediatePeriod", 0);
+        // -1 means testing for graphs, zero means standard operation
+        if (intermediatePeriod > 0 || intermediatePeriod == -1) {
+            intermediatePath = props.getString("intermediatePath");
+        }
+
+        random = new Random();
+        seedMutex = new Mutex();
+}
+
+bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job,
+        int sceneResID, int sensorResID, int samplerResID) {
+
+    for (int loop=0; loop<nPoints; ++loop) {
+        float testValue;
+        if (exponential) {
+            testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);
+        } else {
+            testValue = minValue + loop * (maxValue - minValue)/nPoints;
+        }
+
+        // Override the property we want to test
+        props.removeProperty(testProperty);
+        props.setInteger(testProperty, testValue);
+
+        for (int i=0; i<nSubPoints; ++i) {     
+            init();
+            
+            intermediatePath = props.getString("intermediatePath") + std::to_string(loop) + "-" + std::to_string(i) + "-";
+
+            myRender(scene, queue, job, sceneResID, sensorResID, samplerResID);
+
+        }
+    }
+    return true;
 }
 
 MTS_IMPLEMENT_CLASS(MyPathTracer, false, Integrator);

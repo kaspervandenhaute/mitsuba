@@ -37,7 +37,7 @@ MTS_NAMESPACE_BEGIN
 class PSSMLTProcess : public ParallelProcess {
 public:
     PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
-        const MYPSSMLTConfiguration &config, const Bitmap *directImage,
+        const MYPSSMLTConfiguration &config, 
         const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector);
 
     void develop();
@@ -56,7 +56,6 @@ private:
     ref<const RenderJob> m_job;
     RenderQueue *m_queue;
     const MYPSSMLTConfiguration &m_config;
-    const Bitmap *m_directImage;
     ImageBlock *m_accum;
     ProgressReporter *m_progress;
     const std::vector<PositionedPathSeed> &m_seeds;

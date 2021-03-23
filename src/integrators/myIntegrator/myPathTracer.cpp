@@ -39,23 +39,23 @@ MyPathTracer::MyPathTracer(const Properties &props)
   }
 
 
-bool MyPathTracer::myRender(Scene *scene,
+void MyPathTracer::renderSetup(Scene *scene,
         RenderQueue *queue, const RenderJob *job,
         int sceneResID, int sensorResID, int samplerResID) {
-    ref<Scheduler> sched = Scheduler::getInstance();
-    ref<Sensor> sensor = static_cast<Sensor *>(sched->getResource(sensorResID));
-    ref<Film> film = sensor->getFilm();
+    sched = Scheduler::getInstance();
+    sensor = static_cast<Sensor *>(sched->getResource(sensorResID));
+    film = sensor->getFilm();
 
-    size_t nCores = sched->getCoreCount();
-    Sampler *sampler = static_cast<Sampler *>(sched->getResource(samplerResID, 0));
+    nCores = sched->getCoreCount();
+    sampler = static_cast<Sampler *>(sched->getResource(samplerResID, 0));
 
-    auto cropSize = film->getCropSize();
+    cropSize = film->getCropSize();
     invSize = Vector2(1.f/cropSize.x, 1.f/cropSize.y);
 
     samplesPerPixel = sampler->getSampleCount();
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
-    ref<Bitmap> mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
+    mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
     pathResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
@@ -72,6 +72,11 @@ bool MyPathTracer::myRender(Scene *scene,
         samplesPerPixel, samplesPerPixel == 1 ? "sample" : "samples", nCores,
         nCores == 1 ? "core" : "cores");
 
+}
+
+
+bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *job,
+        int sceneResID, int sensorResID, int samplerResID) {
 
     // mlt samplers
     ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
@@ -106,7 +111,6 @@ bool MyPathTracer::myRender(Scene *scene,
     for (iteration=0; iteration<iterations; ++iteration) {
 
         // Log(EInfo, "Starting on path tracing in iteration %i", iteration);
-
 
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
         
@@ -334,27 +338,36 @@ void MyPathTracer::init() {
 bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job,
         int sceneResID, int sensorResID, int samplerResID) {
 
-    for (int loop=0; loop<nPoints; ++loop) {
-        float testValue;
-        if (exponential) {
-            testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);
-        } else {
-            testValue = minValue + loop * (maxValue - minValue)/nPoints;
-        }
+    renderSetup(scene, queue, job, sceneResID, sensorResID, samplerResID);
 
-        // Override the property we want to test
-        props.removeProperty(testProperty);
-        props.setInteger(testProperty, testValue);
+    if (props.getInteger("intermediatePeriod", 0) == -1) {
 
-        for (int i=0; i<nSubPoints; ++i) {     
-            init();
+        for (int loop=0; loop<nPoints; ++loop) {
+            float testValue;
+            if (exponential) {
+                testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);
+            } else {
+                testValue = minValue + loop * (maxValue - minValue)/nPoints;
+            }
+
             
-            intermediatePath = props.getString("intermediatePath") + std::to_string(loop) + "-" + std::to_string(i) + "-";
+            // Override the property we want to test
+            props.removeProperty(testProperty);
+            props.setInteger(testProperty, testValue);
 
-            myRender(scene, queue, job, sceneResID, sensorResID, samplerResID);
+            init();
 
+            for (int i=0; i<nSubPoints; ++i) {               
+
+                intermediatePath = props.getString("intermediatePath") + std::to_string(loop) + "-" + std::to_string(i) + "-";
+
+                myRender(scene, queue, job, sceneResID, sensorResID, samplerResID);
+            }
         }
+    } else {
+        myRender(scene, queue, job, sceneResID, sensorResID, samplerResID);
     }
+
     return true;
 }
 

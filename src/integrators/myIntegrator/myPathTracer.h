@@ -107,6 +107,9 @@ private:
 
     void init();
 
+    void renderSetup(Scene *scene, RenderQueue *queue, const RenderJob *job,
+        int sceneResID, int sensorResID, int samplerResID);
+
     bool myRender(Scene *scene, RenderQueue *queue, const RenderJob *job,
         int sceneResID, int sensorResID, int samplerResID);
 
@@ -123,6 +126,7 @@ private:
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;
+    ref<Bitmap> mltResult;
     bool noMlt;
     Float outlierDetectorThreshold;
     int intermediatePeriod;
@@ -130,6 +134,12 @@ private:
     ref<Random> random;
     uint64_t cost = 0;
 
+    ref<Scheduler> sched;
+    ref<Sensor> sensor;
+    ref<Film> film;
+    Sampler *sampler;
+    size_t nCores;
+    Vector2i cropSize;
 
     Properties props;
     int nPoints, nSubPoints;

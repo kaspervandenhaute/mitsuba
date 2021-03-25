@@ -4,15 +4,15 @@
 #include <string>
 #include <typeinfo>
 #include <stdio.h>
+#include <numeric>
 
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/bidir/pathsampler.h>
 
 #include "myrenderproc.h"
-#include "utils/writeBitmap.h"
-#include "myPssmltSampler.h"
+
 #include "my_pssmlt_proc.h"
-#include "myRplSampler.h"
+
 
 #include "outlierDetectors/bitterli.h"
 #include "outlierDetectors/zirr1.h"
@@ -21,6 +21,9 @@
 
 
 MTS_NAMESPACE_BEGIN
+
+StatsCounter seedCounter("My integrator", "Number of seeds");
+StatsCounter outlierCounter("My integrator", "Number of outliers");
 
 MyPathTracer::MyPathTracer(const Properties &props)
  : Integrator(props), props(props) {
@@ -80,33 +83,8 @@ void MyPathTracer::renderSetup(Scene *scene,
 bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *job,
         int sceneResID, int sensorResID, int samplerResID) {
 
-    // mlt samplers
-    ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
-    std::vector<SerializableObject *> mltSamplers(sched->getCoreCount());
-    for (size_t i=0; i<mltSamplers.size(); ++i) {
-        ref<Sampler> clonedSampler = mltSampler->clone();
-        clonedSampler->incRef();
-        mltSamplers[i] = clonedSampler.get();
-    }
-    int mltSamplerResID = sched->registerMultiResource(mltSamplers);
-    for (size_t i=0; i<sched->getCoreCount(); ++i)
-        mltSamplers[i]->decRef();
- 
-    // path tracer samplers
-    ref<MyRplSampler> rplSampler = new MyRplSampler();
-    std::vector<SerializableObject*> rplSamplers(sched->getCoreCount());
-    for (size_t i=0; i<rplSamplers.size(); ++i) {
-        ref<Sampler> clonedSampler = rplSampler->clone();
-        clonedSampler->incRef();
-        rplSamplers[i] = clonedSampler.get();
-    }
-    int rplSamplerResID = sched->registerMultiResource(rplSamplers);
-    for (size_t i=0; i<sched->getCoreCount(); ++i)
-        rplSamplers[i]->decRef();
-
-
-    // Set chain lenght
-    m_config.nMutations = 1000;
+    int mltSamplerResID, rplSamplerResID;
+    initialiseSamplers(mltSamplerResID, rplSamplerResID);
 
     int integratorResID = sched->registerResource(this);
 
@@ -136,108 +114,75 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         }
 
         if (iteration != 0 && !noMlt) {
-            Float avgLuminance = 0;
-            for (auto& seed : pathSeeds) {
-                avgLuminance += seed.luminance;
-            }
-            size_t nb_seeds = pathSeeds.size();
-            avgLuminance /= nb_seeds;
+            // mlt budget is nb chains * nb mutations
+            auto mltBudget = computeMltBudget();
+            // if there are seeds, samples have been discarded. They need to be put back
+            auto nbOfChains = pathSeeds.size() > 0 ? std::max(mltBudget / m_config.nMutations, (size_t) 1) : 0;
 
-            if (nb_seeds > 0) {
-                // mlt budget is nb chains * nb mutations
-                auto mltBudget = computeMltBudget();
-                // if there are seeds, samples have been discarded. They need to be put back
-                auto nbOfChains = std::max(mltBudget / m_config.nMutations, (size_t) 1);
+            // actual mlt budget
+            mltBudget = nbOfChains * m_config.nMutations;
 
-                // actual mlt budget
-                mltBudget = nbOfChains * m_config.nMutations;
+            // update the detector for the next iteration.
+            detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
 
-                cost += mltBudget;
+            cost += mltBudget;
 
-                if (nbOfChains > 0) {
-                    m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
+            if (nbOfChains > 0) {
+                m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
 
-                    // Pick seeds proportional to their luminance
-                    auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
-                    // update the detector for the next iteration.
-                    detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
+                // Pick seeds proportional to their luminance
+                auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
 
-                    // Write all outliers and seeds for later analysis
-                    for (auto& o : pathSeeds) {
-                        outliersResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
-                    }
-                    for (auto& o : seeds) {
-                        seedsResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
-                    }
+                updateOutlierSeedsStats(pathSeeds, seeds, outlierCounter, seedCounter);
 
-                    // Multiple seeds per work unit
-                    assert(seeds.size() >= (size_t) m_config.workUnits);
+                // Multiple seeds per work unit
+                assert(seeds.size() >= (size_t) m_config.workUnits);
+
+                Float avgLuminance = std::accumulate(seeds.begin(), seeds.end(), 0, [] (Float accum, PositionedPathSeed const& seed1) 
+                                                                {return accum + seed1.luminance;} ) / seeds.size();
+            
+                Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
+
+                // We dont need the original list any more. The seeds that will be used are copied to seeds.
+                pathSeeds.clear();
+
+                ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
+                process->bindResource("scene", sceneResID);
+                process->bindResource("sensor", sensorResID);
+                process->bindResource("sampler", mltSamplerResID);
+                process->bindResource("rplSampler", rplSamplerResID);
+
+                // Log(EInfo, "Binded resources");
+
+                m_process = process;
+                sched->schedule(process);
+                sched->wait(process);
+                m_process = NULL;
                 
-                    Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
-
-                    // We dont need the original list any more. The seeds that will be used are copied to seeds.
-                    pathSeeds.clear();
-
-                    ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
-                    process->bindResource("scene", sceneResID);
-                    process->bindResource("sensor", sensorResID);
-                    process->bindResource("sampler", mltSamplerResID);
-                    process->bindResource("rplSampler", rplSamplerResID);
-
-                    // Log(EInfo, "Binded resources");
-
-                    m_process = process;
-                    sched->schedule(process);
-                    sched->wait(process);
-                    m_process = NULL;
-                    
-                    process->develop();
+                process->develop();
 
 
-                    if (process->getReturnStatus() != ParallelProcess::ESuccess) {
-                        Log(EError, "Error while mlting.");
-                    }    
-                }
+                if (process->getReturnStatus() != ParallelProcess::ESuccess) {
+                    Log(EError, "Error while mlting.");
+                }    
             }
+            
         } else {
             detector->update((iteration+1) * samplesPerPixel);
         }
 
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
-            auto intermediate = mltResult->clone();
-            intermediate->scale(1.f/samplesPerPixel); //TODO: Why?
-            intermediate->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), intermediate->getSize());
-            intermediate->scale(1.f/iteration);
-            BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
+            writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
         }
     }
 
+    writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
+
     mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-    auto result = mltResult->clone();
-    
-    result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
-    result->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
 
-    film->addBitmap(result);
+    writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
 
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/mlt.exr");
-    mltResult->clear();
-    mltResult->accumulate(seedsResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
-    mltResult->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/seeds.exr");
-    mltResult->clear();
-    mltResult->accumulate(outliersResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
-    mltResult->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/outliers.exr");
-    mltResult->clear();
-    mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
-    mltResult->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/path.exr");
-
-    mltResult->clear();
-    pathResult->clear();
-    cost = 0;
+    clearResults();
 
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
@@ -245,16 +190,6 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     return true;
 }
 
-size_t MyPathTracer::computeMltBudget() const {
-    Float r = weightedAvg.get() / unweightedAvg.get();
-    // When all samples are outliers r will be close to 1
-    if (r >= 0.99 && r <= 1.01) {
-        return samplesTotal;
-    } else if (r >= 1.01) {
-        return 0;
-    }
-    return samplesTotal * r / (1-r);
-}
 
 void MyPathTracer::renderBlock(const Scene *scene,
         const Sensor *sensor, Sampler *_sampler, ImageBlock *block,
@@ -357,6 +292,9 @@ void MyPathTracer::init() {
             intermediatePath = props.getString("intermediatePath");
         }
 
+        // Set chain lenght
+        m_config.nMutations = 1000;
+
         random = new Random();
         seedMutex = new Mutex();
 }
@@ -375,7 +313,6 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
             } else {
                 testValue = minValue + loop * (maxValue - minValue)/nPoints;
             }
-
             
             // Override the property we want to test
             props.removeProperty(testProperty);

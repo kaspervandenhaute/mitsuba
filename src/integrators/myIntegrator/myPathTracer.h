@@ -2,11 +2,17 @@
 #include <mitsuba/core/properties.h>
 #include <mitsuba/render/integrator.h>
 #include <mitsuba/core/bitmap.h>
+#include "utils/writeBitmap.h"
+
+#include <mitsuba/core/statistics.h>
 
 #include <string>
 
 #include "my_pathSeed.h"
 #include "xxHash/xxhash.h"
+
+#include "myPssmltSampler.h"
+#include "myRplSampler.h"
 
 #include "outlierDetectors/outlierDetector.h"
 #include "myPSSMLTconfig.h"
@@ -16,6 +22,7 @@
 #define MY_PATH_TRACER
 
 MTS_NAMESPACE_BEGIN
+
 
 template<typename T>
 class RunningAverage {
@@ -68,8 +75,6 @@ public:
             Scheduler::getInstance()->cancel(m_process);
     }
     
-    size_t computeMltBudget() const;
-
     virtual void bindUsedResources(ParallelProcess *proc) const {};
 
     virtual void wakeup(ConfigurableObject *parent,
@@ -100,9 +105,98 @@ private:
         return seeds;
     }
 
+    inline size_t computeMltBudget() const {
+    Float r = weightedAvg.get() / unweightedAvg.get();
+    // When all samples are outliers r will be close to 1
+    if (r >= 0.99 && r <= 1.01) {
+        return samplesTotal;
+    } else if (r >= 1.01) {
+        return 0;
+    }
+    return samplesTotal * r / (1-r);
+}
+
     inline uint64_t createSeed(Point2i const& pos) const {
         int buffer[3] = {pos.x, pos.y, iteration};
         return (uint64_t) XXH3_64bits_withSeed((void*) buffer, sizeof(int)*3, 0);
+    }
+
+    void writeAvos(std::string const& path) {
+        auto result = mltResult->clone();
+        result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iterations);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "total.exr");
+
+        BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt.exr");
+
+        result->clear();
+        result->accumulate(seedsResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iterations);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "seeds.exr");
+
+        result->clear();
+        result->accumulate(outliersResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iterations);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outliers.exr");
+
+        result->clear();
+        result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iterations);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "path.exr");
+    }
+
+    void writeTotal(std::string const& path) {
+        auto result = mltResult->clone();
+        result->scale(1.f/samplesPerPixel); //TODO: Why?
+        result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iteration);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path);
+    }
+
+    void clearResults() {
+        mltResult->clear();
+        pathResult->clear();
+        outliersResult->clear();
+        seedsResult->clear();
+        cost = 0;
+    }
+
+    void updateOutlierSeedsStats(std::vector<PositionedPathSeed> const& outliers, std::vector<PositionedPathSeed> const& seeds, StatsCounter& outlierCounter, StatsCounter& seedsCounter) {
+        // Write all outliers and seeds for later analysis
+        for (auto& o : pathSeeds) {
+            outliersResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
+        }
+        for (auto& o : seeds) {
+            seedsResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
+        }
+        outlierCounter += pathSeeds.size();
+        seedsCounter += seeds.size();
+    }
+
+    void initialiseSamplers(int& mltSamplerResID, int& rplSamplerResID) {
+        // mlt samplers
+        ref<MyPSSMLTSampler> mltSampler = new MyPSSMLTSampler(m_config.mutationSizeLow, m_config.mutationSizeHigh);
+        std::vector<SerializableObject *> mltSamplers(sched->getCoreCount());
+        for (size_t i=0; i<mltSamplers.size(); ++i) {
+            ref<Sampler> clonedSampler = mltSampler->clone();
+            clonedSampler->incRef();
+            mltSamplers[i] = clonedSampler.get();
+        }
+        mltSamplerResID = sched->registerMultiResource(mltSamplers);
+        for (size_t i=0; i<sched->getCoreCount(); ++i)
+            mltSamplers[i]->decRef();
+    
+        // path tracer samplers
+        ref<MyRplSampler> rplSampler = new MyRplSampler();
+        std::vector<SerializableObject*> rplSamplers(sched->getCoreCount());
+        for (size_t i=0; i<rplSamplers.size(); ++i) {
+            ref<Sampler> clonedSampler = rplSampler->clone();
+            clonedSampler->incRef();
+            rplSamplers[i] = clonedSampler.get();
+        }
+        rplSamplerResID = sched->registerMultiResource(rplSamplers);
+        for (size_t i=0; i<sched->getCoreCount(); ++i)
+            rplSamplers[i]->decRef();
     }
 
     void init();

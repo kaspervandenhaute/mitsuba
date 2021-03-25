@@ -57,6 +57,8 @@ void MyPathTracer::renderSetup(Scene *scene,
 
     mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
     pathResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
+    seedsResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
+    outliersResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
@@ -160,6 +162,14 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
                     // update the detector for the next iteration.
                     detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
 
+                    // Write all outliers and seeds for later analysis
+                    for (auto& o : pathSeeds) {
+                        outliersResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
+                    }
+                    for (auto& o : seeds) {
+                        seedsResult->put(Point2(o.position.x * cropSize.x, o.position.y * cropSize.y), o.spec, 1);
+                    }
+
                     // Multiple seeds per work unit
                     assert(seeds.size() >= (size_t) m_config.workUnits);
                 
@@ -201,13 +211,29 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             BitmapWriter::writeBitmap(intermediate, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
         }
     }
-    
+
     mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
+    auto result = mltResult->clone();
+    
+    result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
+    result->scale(1.f/iterations);
+    BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
+
+    film->addBitmap(result);
+
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/mlt.exr");
+    mltResult->clear();
+    mltResult->accumulate(seedsResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
+    mltResult->scale(1.f/iterations);
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/seeds.exr");
+    mltResult->clear();
+    mltResult->accumulate(outliersResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
+    mltResult->scale(1.f/iterations);
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/outliers.exr");
+    mltResult->clear();
     mltResult->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), mltResult->getSize());
     mltResult->scale(1.f/iterations);
-    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, intermediatePath + std::to_string(cost/1000) + ".exr");
-
-    film->addBitmap(mltResult);
+    BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, "/mnt/g/Documents/00-school/master/thesis/prentjes/test/path.exr");
 
     mltResult->clear();
     pathResult->clear();
@@ -288,7 +314,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
-                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), seed, index, luminance);
+                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), seed, index, luminance, spec);
 
                     // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
                     nb_seeds++;

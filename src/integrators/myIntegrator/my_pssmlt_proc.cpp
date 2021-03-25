@@ -33,12 +33,13 @@ MTS_NAMESPACE_BEGIN
 /*                         Worker implementation                        */
 /* ==================================================================== */
 
-StatsCounter largeStepRatio("Primary sample space MLT",
-    "Accepted large steps", EPercentage);
+
 StatsCounter smallStepRatio("Primary sample space MLT",
     "Accepted small steps", EPercentage);
-StatsCounter acceptanceRate("Primary sample space MLT",
-    "Overall acceptance rate", EPercentage);
+StatsCounter rejectionRate("Primary sample space MLT",
+    "Rejected steps", EPercentage);
+StatsCounter domainRatio("Primary sample space MLT",
+    "Rejected due to domain", EPercentage);
 StatsCounter forcedAcceptance("Primary sample space MLT",
     "Number of forced acceptances");
 
@@ -187,6 +188,11 @@ public:
                 // TODO: works only for unidirectional
                 // Mlt integrates f(u) * w with w == 0 || w == 1
                 Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
+
+                if (w == 0) {
+                    ++domainRatio;
+                }
+
                 // multiply f(u) with w
                 for (auto& splat : proposed->splats) {
                     splat.second *= w;
@@ -217,7 +223,10 @@ public:
                     currentWeight = 1;
                     proposedWeight = 0;
                     accept = false;
+                    ++rejectionRate;
+                    domainRatio.incrementBase(1);
                 }
+                rejectionRate.incrementBase(1);
 
                 cumulativeWeight += currentWeight;
 
@@ -239,9 +248,6 @@ public:
                 
                     smallStepRatio.incrementBase(1);
                     ++smallStepRatio;
-                    
-                    acceptanceRate.incrementBase(1);
-                    ++acceptanceRate;
 
                 } else {
                     for (size_t k=0; k<proposed->size(); ++k) {
@@ -255,7 +261,6 @@ public:
                     m_sensorSampler->reject();
                     m_emitterSampler->reject();
                     m_directSampler->reject();
-                    acceptanceRate.incrementBase(1);
                     smallStepRatio.incrementBase(1);
                 }
             }

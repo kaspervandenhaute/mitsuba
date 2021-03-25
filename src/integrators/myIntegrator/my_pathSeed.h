@@ -44,6 +44,7 @@ struct PositionedPathSeed {
     size_t index;       ///< Index into a rewindable random number stream
     uint64_t seed;      ///< Seed of the rng
     Float luminance;    ///< Luminance value of the path (for sanity checks)
+    Spectrum spec;
     Point2 position;    ///< Position on screen
     Float pdf;          ///< The pdf with which the sample is chosen
     int s;              ///< Number of steps from the luminaire
@@ -51,8 +52,8 @@ struct PositionedPathSeed {
 
     inline PositionedPathSeed() { }
 
-    inline PositionedPathSeed(Point2 position, uint64_t seed, size_t index, Float luminance, Float pdf =0, int s = 0, int t = 0)
-        : index(index), seed(seed), luminance(luminance), position(position), pdf(pdf), s(s), t(t) {}
+    inline PositionedPathSeed(Point2 position, uint64_t seed, size_t index, Float luminance, Spectrum spec, Float pdf =0, int s = 0, int t = 0)
+        : index(index), seed(seed), luminance(luminance), spec(spec), position(position), pdf(pdf), s(s), t(t) {}
 
     inline PositionedPathSeed(Stream *stream) {
         seed = stream->readSize();

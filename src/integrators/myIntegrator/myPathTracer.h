@@ -127,6 +127,8 @@ private:
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;
     ref<Bitmap> mltResult;
+    ref<ImageBlock> outliersResult;
+    ref<ImageBlock> seedsResult;
     bool noMlt;
     Float outlierDetectorThreshold;
     int intermediatePeriod;

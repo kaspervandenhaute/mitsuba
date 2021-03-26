@@ -1,12 +1,16 @@
 
 #include "zirr1.h"
 
+#include <mitsuba/core/statistics.h>
+
 MTS_NAMESPACE_BEGIN
+
+StatsCounter rcCounter("Zirr1", "Fraction of outliers because of r*c", EPercentage);
 
 
 OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappaMin, float threshold) :
         width(width), height(height), b(b), maxValue(maxValue), kappaMin(kappaMin), threshold(threshold), 
-        nbBuffers(std::ceil(std::log(maxValue))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
+        nbBuffers(std::ceil(std::log(maxValue)/std::log(b))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
         std::cout << nbBuffers << "  " << std::ceil(std::log(maxValue)) << std::endl;
         powersOfb[0] = 1;
         for (int i=1; i<nbBuffers; ++i) {
@@ -57,31 +61,26 @@ void OutlierDetectorZirr1::contribute(Point2 const& posFloat, float value) {
     }
 }
 
-float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, float value) const {
+float OutlierDetectorZirr1::calcualateOccurencies(Point2i const& pos, int j) const {
     assert(pos.y < height && pos.x < width);
-
-    if (value < maxValue) {
-        auto ratioAndIndex = calculateRatioAndIndex(value);
-        auto j = ratioAndIndex.index;
-        
-        float result = 0;
-        for (int i=-1; i<=1; ++i) {
-            if (j + i < nbBuffers && j+i >= 0) {
-                for (int x0=-1; x0<=1; ++x0) {
-                    for (int y0=-1; y0<=1; ++y0) {
-                        auto x = pos.x + x0;
-                        auto y = pos.y + y0;
-                        if (x >= 0 && x < width && y >= 0 && y < height) {
-                            result += spp * buffer.get(pos.x, pos.y, j+i) / powersOfb[j+i];  
-                        }
+    
+    float result = 0;
+    for (int i=-1; i<=1; ++i) {
+        if (j + i < nbBuffers && j+i >= 0) {
+            for (int x0=-1; x0<=1; ++x0) {
+                for (int y0=-1; y0<=1; ++y0) {
+                    auto x = pos.x + x0;
+                    auto y = pos.y + y0;
+                    if (x >= 0 && x < width && y >= 0 && y < height) {
+                        result += spp * buffer.get(pos.x, pos.y, j+i) / powersOfb[j+i];  
                     }
-                }
-                
+                }      
             }
+            
         }
-        return result;
     }
-    return 0;
+    return result;
+
 }   
 
 float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value) const {
@@ -96,13 +95,28 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
         return 1;
     }
 
-    float occurencies = calcualateOccurencies(pos, value);
+    auto ratioAndIndex = calculateRatioAndIndex(value);
+    int index = ratioAndIndex.index;
+    
+    float Emin = 0;
+    for (int j=0; j<=index; j++) {
+        Emin += calcualateOccurencies(pos, j) / spp;
+    }
 
-    // if (occurencies < kappaMin) {
-    //     return 1;
-    // }
-    auto rStarC = spp/(occurencies-kappaMin);
-    if (rStarC > threshold) {
+    auto rStarV = powersOfb[index] / Emin;
+
+    auto rStarC = spp/(calcualateOccurencies(pos, index) - kappaMin);
+    if (rStarC < 0) {
+        rStarC = 1;
+    }
+
+    // std::cout << "r*c: " << rStarC << "  r*v: " << rStarV << std::endl;
+    
+    if (std::min(rStarC, rStarV) > threshold) {
+        if (rStarC < rStarV) {
+            ++rcCounter;
+        } 
+        rcCounter.incrementBase(1);
         return 1;
     }
 

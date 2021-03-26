@@ -20,7 +20,7 @@ public:
     void update(int newSpp) override;
 
 private:
-    float calcualateOccurencies(Point2i const& pos, float value) const;
+    float calcualateOccurencies(Point2i const& pos, int index) const;
     RatioAndIndex calculateRatioAndIndex(float value) const;
 
     const int width, height;

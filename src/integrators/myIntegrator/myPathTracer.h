@@ -127,6 +127,7 @@ private:
         result->scale(1.f/iterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "total.exr");
 
+        mltResult->scale(1.f/iterations);
         BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt.exr");
 
         result->clear();
@@ -146,11 +147,16 @@ private:
     }
 
     void writeTotal(std::string const& path) {
-        auto result = mltResult->clone();
+        auto result = createResult();
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path);
+    }
+
+    ref<Bitmap> createResult() {
+        ref<Bitmap> result = mltResult->clone();
         result->scale(1.f/samplesPerPixel); //TODO: Why?
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iteration);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path);
+        return result;
     }
 
     void clearResults() {
@@ -158,7 +164,6 @@ private:
         pathResult->clear();
         outliersResult->clear();
         seedsResult->clear();
-        cost = 0;
     }
 
     void updateOutlierSeedsStats(std::vector<PositionedPathSeed> const& outliers, std::vector<PositionedPathSeed> const& seeds, StatsCounter& outlierCounter, StatsCounter& seedsCounter) {

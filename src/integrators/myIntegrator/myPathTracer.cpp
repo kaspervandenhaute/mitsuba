@@ -28,16 +28,16 @@ StatsCounter outlierCounter("My integrator", "Number of outliers");
 MyPathTracer::MyPathTracer(const Properties &props)
  : Integrator(props), props(props) {
 
-        // Test options
-        nPoints = props.getInteger("points", 20);
-        nSubPoints = props.getInteger("subpoints", 10);
-        
-        testProperty = props.getString("testProperty", "iterations");
-        exponential = props.getBoolean("exponentialTest", true);
-        minValue = props.getFloat("minValue", 0);
-        maxValue = props.getFloat("maxValue", 1000);
+    // Test options
+    nPoints = props.getInteger("points", 20);
+    nSubPoints = props.getInteger("subpoints", 10);
+    
+    testProperty = props.getString("testProperty", "iterations");
+    exponential = props.getBoolean("exponentialTest", true);
+    minValue = props.getFloat("minValue", 0);
+    maxValue = props.getFloat("maxValue", 1000);
 
-        init();
+    init();
 
   }
 
@@ -68,8 +68,8 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000);
-    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 8, 1000, 9, outlierDetectorThreshold);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 250);
+    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 50, 3, outlierDetectorThreshold);
     // detector = new TestOutlierDetector();
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -176,13 +176,19 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         }
     }
 
-    writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
+    if (intermediatePeriod != 0) {
+        writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
+    } else {
+        auto result = createResult();
+        film->setBitmap(result);
+    }
 
     mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-
     writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
 
     clearResults();
+
+    cost = 0;
 
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
@@ -197,7 +203,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     auto* sampler = (MyRplSampler*) _sampler;
     
-    
     ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
             sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
             false, false, false);
@@ -206,6 +211,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
     size_t nb_seeds = 0;
 
     block->clear();
+
+    // Integrate oulier domain
+    // if (iteration != 0) {
+    //     samplesPerPixel = 1000;
+    // }
 
     auto invSpp = 1.f/samplesPerPixel;
 
@@ -250,6 +260,10 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
                     localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), seed, index, luminance, spec);
+
+                    // Integrate oulier domain                   
+                    // block->put(position, spec * invSpp, 1);
+                    
 
                     // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
                     nb_seeds++;

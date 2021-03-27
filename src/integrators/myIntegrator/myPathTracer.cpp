@@ -68,8 +68,8 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 250);
-    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 50, 3, outlierDetectorThreshold);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
     // detector = new TestOutlierDetector();
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -183,8 +183,10 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         film->setBitmap(result);
     }
 
-    mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-    writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
+    if (intermediatePeriod != -1) {
+        mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
+        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
+    }
 
     clearResults();
 
@@ -264,7 +266,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
                     // Integrate oulier domain                   
                     // block->put(position, spec * invSpp, 1);
                     
-
                     // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
                     nb_seeds++;
                 }
@@ -320,7 +321,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
     if (props.getInteger("intermediatePeriod", 0) == -1) {
 
-        for (int loop=0; loop<nPoints; ++loop) {
+        for (int loop=1; loop<nPoints; ++loop) {
             float testValue;
             if (exponential) {
                 testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);

@@ -112,7 +112,7 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
     // std::cout << "r*c: " << rStarC << "  r*v: " << rStarV << std::endl;
     
-    if (std::min(rStarC, rStarV) > threshold) {
+    if (index != 0 && std::min(rStarC, rStarV) > threshold) {
         if (rStarC < rStarV) {
             ++rcCounter;
         } 

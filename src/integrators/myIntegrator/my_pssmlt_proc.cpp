@@ -155,10 +155,14 @@ public:
             /* Sanity check -- the luminance should match the one from
             the warmup phase - an error here would indicate inconsistencies
             regarding the use of random numbers during sample generation */
-            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.1) {
+            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.0001) {
                 Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                     "= %f, but expected luminance = %f", seed.seed, current->luminance, seed.luminance);
                 return;
+            }
+
+            if (! m_outlierDetector->calculateWeight(current->getPosition(0), current->luminance) > 0) {
+                Log(EWarn, "Not outlier anymore! luminance = %f, but expected luminance = %f", current->luminance, seed.luminance);
             }
 
             // Log(EInfo, "seed luminance: %f, seed pdf: %f", seed.luminance, seed.pdf);

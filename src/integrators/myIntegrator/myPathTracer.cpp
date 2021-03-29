@@ -113,17 +113,18 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             Log(EError, "Error while path tracing.");
         }
 
+        size_t nbOfChains = 0;
+
         if (iteration != 0 && !noMlt) {
             // mlt budget is nb chains * nb mutations
             auto mltBudget = computeMltBudget();
             // if there are seeds, samples have been discarded. They need to be put back
-            auto nbOfChains = pathSeeds.size() > 0 ? std::max(mltBudget / m_config.nMutations, (size_t) 1) : 0;
+            nbOfChains = pathSeeds.size() > 0 ? std::max(mltBudget / m_config.nMutations, (size_t) 1) : 0;
 
             // actual mlt budget
             mltBudget = nbOfChains * m_config.nMutations;
 
-            // update the detector for the next iteration.
-            detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
+            
 
             cost += mltBudget;
 
@@ -143,8 +144,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             
                 Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
 
-                // We dont need the original list any more. The seeds that will be used are copied to seeds.
-                pathSeeds.clear();
+               
 
                 ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
                 process->bindResource("scene", sceneResID);
@@ -165,11 +165,11 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
                 if (process->getReturnStatus() != ParallelProcess::ESuccess) {
                     Log(EError, "Error while mlting.");
                 }    
-            }
-            
-        } else {
-            detector->update((iteration+1) * samplesPerPixel);
-        }
+            }            
+        } 
+        // update the detector for the next iteration.
+        detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
+        pathSeeds.clear();
 
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
             writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
@@ -261,7 +261,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
-                    localPathSeeds.emplace_back(Point2(position.x * invSize.x, position.y * invSize.y), seed, index, luminance, spec);
+                    localPathSeeds.emplace_back(Point2(position.x / cropSize.x, position.y / cropSize.y), seed, index, luminance, spec);
 
                     // Integrate oulier domain                   
                     // block->put(position, spec * invSpp, 1);

@@ -222,6 +222,7 @@ private:
     Vector2 invSize;
     ref<OutlierDetector> detector;
     int iteration, iterations;
+    int samplesFirstIteration;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;

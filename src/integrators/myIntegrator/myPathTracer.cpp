@@ -185,7 +185,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     if (intermediatePeriod != -1) {
         mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
+        writeAvos("/mnt/g/Documents/00-school/master/thesis/prentjes/test/");
     }
 
     clearResults();
@@ -214,10 +214,10 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
-    // Integrate oulier domain
-    // if (iteration != 0) {
-    //     samplesPerPixel = 1000;
-    // }
+    // First iteration for initialising buffers
+    if (iteration == 0) {
+        samplesPerPixel = samplesFirstIteration;
+    }
 
     auto invSpp = 1.f/samplesPerPixel;
 
@@ -306,6 +306,8 @@ void MyPathTracer::init() {
         if (intermediatePeriod > 0 || intermediatePeriod == -1) {
             intermediatePath = props.getString("intermediatePath");
         }
+
+        samplesFirstIteration = props.getInteger("samplesFirst", 1);
 
         // Set chain lenght
         m_config.nMutations = 1000;

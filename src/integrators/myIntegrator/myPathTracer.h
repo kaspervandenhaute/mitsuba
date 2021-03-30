@@ -7,6 +7,8 @@
 #include <mitsuba/core/statistics.h>
 
 #include <string>
+#include <iostream>
+#include <fstream>
 
 #include "my_pathSeed.h"
 #include "xxHash/xxhash.h"
@@ -23,6 +25,7 @@
 
 MTS_NAMESPACE_BEGIN
 
+struct MltStats;
 
 template<typename T>
 class RunningAverage {
@@ -204,6 +207,8 @@ private:
             rplSamplers[i]->decRef();
     }
 
+    void writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const;
+
     void init();
 
     void renderSetup(Scene *scene, RenderQueue *queue, const RenderJob *job,
@@ -222,7 +227,6 @@ private:
     Vector2 invSize;
     ref<OutlierDetector> detector;
     int iteration, iterations;
-    int samplesFirstIteration;
     RunningAverage<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;

@@ -40,8 +40,11 @@ StatsCounter rejectionRate("Primary sample space MLT",
     "Rejected steps", EPercentage);
 StatsCounter domainRatio("Primary sample space MLT",
     "Rejected due to domain", EPercentage);
+StatsCounter domainMinThreshRatio("Primary sample space MLT",
+    "Rejected due to domain minimum threshold", EPercentage);
 StatsCounter forcedAcceptance("Primary sample space MLT",
     "Number of forced acceptances");
+
 
 class PSSMLTRenderer : public WorkProcessor {
 public:
@@ -155,15 +158,19 @@ public:
             /* Sanity check -- the luminance should match the one from
             the warmup phase - an error here would indicate inconsistencies
             regarding the use of random numbers during sample generation */
-            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.01) {
+            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.1) {
                 Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                     "= %f, but expected luminance = %f", seed.seed, current->luminance, seed.luminance);
                 return;
             }
 
-            if (! m_outlierDetector->calculateWeight(current->getPosition(0), current->luminance) > 0) {
+            bool isoutlier = m_outlierDetector->calculateWeight(current->getPosition(0), current->luminance) > 0;
+
+            if (! isoutlier) {
                 Log(EWarn, "Not outlier anymore! luminance = %f, but expected luminance = %f", current->luminance, seed.luminance);
+                return;
             }
+            // assert(isoutlier); //TODO!!!
 
             // Log(EInfo, "seed luminance: %f, seed pdf: %f", seed.luminance, seed.pdf);
 
@@ -195,6 +202,10 @@ public:
 
                 if (w == 0) {
                     ++domainRatio;
+                    domainMinThreshRatio.incrementBase(1);
+                    if (m_outlierDetector->minValue > proposed->luminance) {
+                        ++domainMinThreshRatio;
+                    }
                 }
 
                 // multiply f(u) with w
@@ -322,6 +333,15 @@ PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
 
 ref<WorkProcessor> PSSMLTProcess::createWorkProcessor() const {
     return new PSSMLTRenderer(m_config, m_outlierDetector);
+}
+
+MltStats PSSMLTProcess::getMltStats() const {
+    return {
+        rejectionRate.getBase(),
+        rejectionRate.getValue(),
+        domainMinThreshRatio.getBase(),
+        domainMinThreshRatio.getValue()
+    };
 }
 
 void PSSMLTProcess::develop() {

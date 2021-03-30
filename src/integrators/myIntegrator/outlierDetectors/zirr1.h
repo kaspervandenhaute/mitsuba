@@ -25,7 +25,6 @@ private:
 
     const int width, height;
     const float b;
-    float maxValue;
     const int kappaMin;
     float threshold;
     const int nbBuffers;

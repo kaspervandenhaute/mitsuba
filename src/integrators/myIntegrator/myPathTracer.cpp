@@ -55,7 +55,6 @@ void MyPathTracer::renderSetup(Scene *scene,
     cropSize = film->getCropSize();
     invSize = Vector2(1.f/cropSize.x, 1.f/cropSize.y);
 
-    samplesPerPixel = sampler->getSampleCount();
     samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
 
     mltResult = new Bitmap(Bitmap::ESpectrum, Bitmap::EFloat, cropSize);
@@ -92,6 +91,10 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
         // Log(EInfo, "Starting on path tracing in iteration %i", iteration);
 
+        if (iteration != 0) {
+            samplesPerPixel = sampler->getSampleCount();
+        }
+
         ref<ParallelProcess> proc = new BlockedRenderProcess(job, queue, scene->getBlockSize());
         
         proc->bindResource("integrator", integratorResID);
@@ -106,6 +109,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         sched->wait(proc);
         m_process = NULL;
 
+        samplesTotal = samplesPerPixel * cropSize.x * cropSize.y;
         cost += samplesTotal;
         
 
@@ -114,6 +118,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         }
 
         size_t nbOfChains = 0;
+
+        MltStats mltStats;
 
         if (iteration != 0 && !noMlt) {
             // mlt budget is nb chains * nb mutations
@@ -144,7 +150,6 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             
                 Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
 
-               
 
                 ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
                 process->bindResource("scene", sceneResID);
@@ -153,6 +158,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
                 process->bindResource("rplSampler", rplSamplerResID);
 
                 // Log(EInfo, "Binded resources");
+                mltStats = process->getMltStats();
 
                 m_process = process;
                 sched->schedule(process);
@@ -167,6 +173,9 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
                 }    
             }            
         } 
+
+        writeStatisticsToFile(pathSeeds.size(), nbOfChains, mltStats);
+
         // update the detector for the next iteration.
         detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
         pathSeeds.clear();
@@ -174,6 +183,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
             writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
         }
+
+        
     }
 
     if (intermediatePeriod != 0) {
@@ -185,7 +196,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     if (intermediatePeriod != -1) {
         mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-        writeAvos("/mnt/g/Documents/00-school/master/thesis/prentjes/test/");
+        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
     }
 
     clearResults();
@@ -213,11 +224,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
     size_t nb_seeds = 0;
 
     block->clear();
-
-    // First iteration for initialising buffers
-    if (iteration == 0) {
-        samplesPerPixel = samplesFirstIteration;
-    }
 
     auto invSpp = 1.f/samplesPerPixel;
 
@@ -261,7 +267,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
-                    localPathSeeds.emplace_back(Point2(position.x / cropSize.x, position.y / cropSize.y), seed, index, luminance, spec);
+                    localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
 
                     // Integrate oulier domain                   
                     // block->put(position, spec * invSpp, 1);
@@ -307,7 +313,7 @@ void MyPathTracer::init() {
             intermediatePath = props.getString("intermediatePath");
         }
 
-        samplesFirstIteration = props.getInteger("samplesFirst", 1);
+        samplesPerPixel = props.getInteger("samplesFirst", 1);
 
         // Set chain lenght
         m_config.nMutations = 1000;
@@ -349,6 +355,41 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
     }
 
     return true;
+}
+
+ void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const {
+
+    std::ofstream myfile ("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
+    if (myfile.is_open())
+    {
+        if (iteration == 0) {
+            myfile << "[\n";
+        }
+
+        myfile << "{";
+
+        myfile << "\"iteration\": " << iteration << ", ";
+        myfile << "\"nOutliers\": " << nOutliers << ", ";
+        myfile << "\"nSeeds\": " << nOutliers << ", ";
+        myfile << "\"cost\": " << cost << ", ";
+        myfile << "\"nMutations\": " << mltStats.nMutations << ", ";
+        myfile << "\"nRejections\": " << mltStats.nRejections << ", ";
+        myfile << "\"nRejectionDomain\": " << mltStats.nRejectionDomain << ", ";
+        myfile << "\"nRejectionsMinThresh\": " << mltStats.nRejectionDomainMinValue;
+        
+        myfile << "}";
+
+        if (iteration != iterations-1) {
+            myfile << ",\n";
+        } else {
+            myfile << "]";
+        }
+
+        myfile.close();
+        
+    } else {
+        Log(EWarn, "Cant open statistics file. Not outputting statistics.");
+    };
 }
 
 MTS_IMPLEMENT_CLASS(MyPathTracer, false, Integrator);

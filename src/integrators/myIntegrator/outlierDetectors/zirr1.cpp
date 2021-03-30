@@ -9,7 +9,7 @@ StatsCounter rcCounter("Zirr1", "Fraction of outliers because of r*c", EPercenta
 
 
 OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappaMin, float threshold) :
-        width(width), height(height), b(b), maxValue(maxValue), kappaMin(kappaMin), threshold(threshold), 
+        OutlierDetector(0.5, maxValue), width(width), height(height), b(b), kappaMin(kappaMin), threshold(threshold), 
         nbBuffers(std::ceil(std::log(maxValue)/std::log(b))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
         std::cout << nbBuffers << "  " << std::ceil(std::log(maxValue)) << std::endl;
         powersOfb[0] = 1;
@@ -112,7 +112,7 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
     // std::cout << "r*c: " << rStarC << "  r*v: " << rStarV << std::endl;
     
-    if (index != 0 && std::min(rStarC, rStarV) > threshold) {
+    if (std::min(rStarC, rStarV) > threshold) {
         if (rStarC < rStarV) {
             ++rcCounter;
         } 

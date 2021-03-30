@@ -29,6 +29,13 @@
 
 MTS_NAMESPACE_BEGIN
 
+struct MltStats {
+    int nMutations;
+    int nRejections;
+    int nRejectionDomain;
+    int nRejectionDomainMinValue;
+};
+
 
 /* ==================================================================== */
 /*                           Parallel process                           */
@@ -41,6 +48,8 @@ public:
         const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector);
 
     void develop();
+
+    MltStats getMltStats() const;
 
     /* ParallelProcess impl. */
     void processResult(const WorkResult *wr, bool cancelled);

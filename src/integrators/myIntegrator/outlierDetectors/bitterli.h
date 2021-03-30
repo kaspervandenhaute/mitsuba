@@ -22,11 +22,11 @@ public:
     void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) override;
     void update(int newSpp) override;
 
+
 private:
     const int width, height;
     const int nbBuffers;
     const float alfaInv, beta;
-    float maxValue, minValue;
     Bitmap3d<float> buffer, tempBuffer;
     float minThreshold = 3;
     int spp;

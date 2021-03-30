@@ -12,6 +12,8 @@ class OutlierDetector {
 
 public:
 
+    OutlierDetector(float min, float max) : minValue(min), maxValue(max) {}
+
     virtual void contribute(Point2 const& pos, float value) =0;
     virtual float calculateWeight(Point2 const& pos, float value) const =0;
     virtual void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) =0;
@@ -20,6 +22,8 @@ public:
     inline Point2i discretePosition(Point2 const& pos) const {
         return Point2i(pos.x - 0.5f, pos.y - 0.5f);
     }
+
+    float minValue, maxValue;
 
 };
 

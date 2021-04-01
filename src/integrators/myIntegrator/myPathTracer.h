@@ -42,6 +42,11 @@ public:
         avg = avg * ((float) (count-1)/count) + val/count;
     }
 
+    void reset() {
+        avg = 0;
+        count = 0;
+    }
+
 private:
     T avg;
     size_t count;

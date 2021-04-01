@@ -17,6 +17,7 @@
 #include "outlierDetectors/bitterli.h"
 #include "outlierDetectors/zirr1.h"
 #include "outlierDetectors/testDetector.h"
+#include "outlierDetectors/thresholdDetector.h"
 
 
 
@@ -69,8 +70,9 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
+    detector = new ThresholdDetector();
     // detector = new TestOutlierDetector();
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -120,6 +122,7 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
         detector->update(pathSeeds, computeMltBudget()/m_config.nMutations, i);
         pathSeeds.clear();
     }
+    unweightedAvg.reset();
 }
 
 

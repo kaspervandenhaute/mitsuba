@@ -70,9 +70,9 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
-    detector = new ThresholdDetector();
+    // detector = new ThresholdDetector();
     // detector = new TestOutlierDetector();
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
@@ -122,7 +122,9 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
         detector->update(pathSeeds, computeMltBudget()/m_config.nMutations, i);
         pathSeeds.clear();
     }
-    unweightedAvg.reset();
+    weightedAvg.reset();
+
+    // pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
 }
 
 
@@ -247,10 +249,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
+    float weighted = 0;
+    float unweighted = 0;
+
     auto invSpp = 1.f/samplesPerPixel;
 
 
-    // for (size_t i = 0; i<1; ++i) {
     for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
@@ -282,8 +286,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             auto weight = detector->calculateWeight(position, luminance);
                 
-            unweightedAvg.put(luminance);
-            weightedAvg.put(weight*luminance);
+            weighted += weight*luminance;
+            unweighted += luminance;
 
             if (weight > 0) {
                 localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
@@ -304,6 +308,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     LockGuard lock(seedMutex); // pathSeeds and pathResult are shared by all threads
     pathResult->put(block);
+
+    auto count = points.size() * samplesPerPixel;
+
+    weightedAvg.put(weighted, count);
+    unweightedAvg.put(unweighted, count);
 
     if (!localPathSeeds.empty()) {
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
@@ -394,6 +403,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
         myfile << "\"nInliersMinValue\": " << inlierMinValue.getValue() << ", ";
         myfile << "\"nSeeds\": " << nSeeds << ", ";
         myfile << "\"cost\": " << cost << ", ";
+        myfile << "\"r\": " << weightedAvg.get() / unweightedAvg.get() << ", ";
         myfile << "\"minValue\": " << detector->minValue << ", ";
         myfile << "\"nMutations\": " << mltStats.nMutations << ", ";
         myfile << "\"nRejections\": " << mltStats.nRejections << ", ";

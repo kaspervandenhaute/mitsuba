@@ -28,18 +28,23 @@ MTS_NAMESPACE_BEGIN
 struct MltStats;
 
 template<typename T>
-class RunningAverage {
+class Average {
 
 public: 
-    RunningAverage() : avg(0), count(0) {}
+    Average() : avg(0), count(0) {}
 
-    T get() const {
+    inline T get() const {
         return avg;
     }
 
-    void put(T val) {
-        ++count;
-        avg = avg * ((float) (count-1)/count) + val/count;
+    inline void put(T val) {
+        put(val, 1);
+    }
+
+    inline void put(T val, int n) {
+        auto prev_count = count;
+        count += n;
+        avg = avg * ((float) (prev_count)/count) + val/count;
     }
 
     void reset() {
@@ -51,6 +56,41 @@ private:
     T avg;
     size_t count;
 };
+
+// template<typename T>
+// class RunningAverage {
+
+// public: 
+//     RunningAverage(int nValues) : avg(0), count(0), n(nValues), current(0) {
+//         numbers = new T[](nValues);
+//     }
+
+//     inline T get() const {
+//         int total = 0;
+//         for (int i=0; i<n; ++i) {
+//             total += numbers[i];
+//         }
+//         return total / n;
+//     }
+
+//     inline void put(T val) {
+
+//     }
+
+//     inline void put(T val, int n) {
+
+//     }
+
+//     void reset() {
+
+//     }
+
+// private:
+//     T avg;
+//     size_t count;
+//     int n;
+//     T* numbers;
+// };
 
 
 class MyPathTracer : public Integrator {
@@ -238,7 +278,7 @@ private:
     Vector2 invSize;
     ref<OutlierDetector> detector;
     int iteration, iterations;
-    RunningAverage<Float> unweightedAvg, weightedAvg;
+    Average<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;
     ref<Bitmap> mltResult;

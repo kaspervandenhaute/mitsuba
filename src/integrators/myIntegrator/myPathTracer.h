@@ -111,10 +111,10 @@ private:
     inline size_t computeMltBudget() const {
     Float r = weightedAvg.get() / unweightedAvg.get();
     // When all samples are outliers r will be close to 1
-    if (r >= 0.99 && r <= 1.01) {
+    if (r >= 0.99 && r <= 1) {
         return samplesTotal;
-    } else if (r >= 1.01) {
-        return 0;
+    } else if (r > 1) {
+        assert(r <= 1);
     }
     return samplesTotal * r / (1-r);
 }

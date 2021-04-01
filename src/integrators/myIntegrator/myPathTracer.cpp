@@ -24,6 +24,8 @@ MTS_NAMESPACE_BEGIN
 
 StatsCounter seedCounter("My integrator", "Number of seeds");
 StatsCounter outlierCounter("My integrator", "Number of outliers");
+StatsCounter inlierMinValue("My integrator", "Inliers with higher luminance than minValue", EPercentage);
+
 
 MyPathTracer::MyPathTracer(const Properties &props)
  : Integrator(props), props(props) {
@@ -258,22 +260,22 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             detector->contribute(position, luminance);
             
-            unweightedAvg.put(luminance);
+            
 
             if (iteration != 0) {
                 auto weight = detector->calculateWeight(position, luminance);
-
+                
+                unweightedAvg.put(luminance);
                 weightedAvg.put(weight*luminance);
                 
                 block->put(position, spec * (1-weight) * invSpp, 1);
                 if (weight > 0) {
                     localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
-
-                    // Integrate oulier domain                   
-                    // block->put(position, spec * invSpp, 1);
-                    
-                    // Log(EInfo, "Index=%i   Position=[%f,%f]", seed, position.x, position.y);
-                    nb_seeds++;
+                } else {
+                    inlierMinValue.incrementBase();
+                    if (detector->minValue < luminance) {
+                        ++inlierMinValue;
+                    }
                 }
             }
 
@@ -370,8 +372,11 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
         myfile << "\"iteration\": " << iteration << ", ";
         myfile << "\"nOutliers\": " << nOutliers << ", ";
-        myfile << "\"nSeeds\": " << nOutliers << ", ";
+        myfile << "\"nInliers\": " << samplesTotal - nOutliers << ", ";
+        myfile << "\"nInliersMinValue\": " << inlierMinValue.getValue() << ", ";
+        myfile << "\"nSeeds\": " << nSeeds << ", ";
         myfile << "\"cost\": " << cost << ", ";
+        myfile << "\"minValue\": " << detector->minValue << ", ";
         myfile << "\"nMutations\": " << mltStats.nMutations << ", ";
         myfile << "\"nRejections\": " << mltStats.nRejections << ", ";
         myfile << "\"nRejectionDomain\": " << mltStats.nRejectionDomain << ", ";

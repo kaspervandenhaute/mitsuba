@@ -207,6 +207,12 @@ private:
             rplSamplers[i]->decRef();
     }
 
+    void pathTracing(Scene *scene, RenderQueue *queue, const RenderJob *job, 
+    int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID);
+
+    void initDetector(Scene *scene, RenderQueue *queue, const RenderJob *job, 
+    int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID);
+
     void writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const;
 
     void init();
@@ -233,7 +239,6 @@ private:
     ref<Bitmap> mltResult;
     ref<ImageBlock> outliersResult;
     ref<ImageBlock> seedsResult;
-    bool noMlt;
     Float outlierDetectorThreshold;
     int intermediatePeriod;
     std::string intermediatePath;

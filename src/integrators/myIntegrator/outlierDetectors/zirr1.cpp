@@ -87,41 +87,129 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
     auto pos = discretePosition(posFloat);
     assert(pos.y < height && pos.x < width);
 
-    if (value < 0.0000001) {
+    // if (value < 0.0000001) {
+    //     return 0;
+    // }
+
+    // if (value > maxValue) {
+    //     return 1;
+    // }
+
+    // auto ratioAndIndex = calculateRatioAndIndex(value);
+    // int index = ratioAndIndex.index;
+
+    // float rStarC = spp/(calcualateOccurencies(pos, index) - kappaMin);
+    // if (rStarC < 0) {
+    //     rStarC = 1.f;
+    // }
+    
+    // float Emin = 0;
+    // for (int j=0; j<=index; j++) {
+    //     Emin += powersOfb[j]/(100 * spp/(calcualateOccurencies(pos, j) - kappaMin));
+    // }
+
+    // auto rStarV = powersOfb[index] / Emin;
+
+
+    // // std::cout << "r*c: " << rStarC << "  r*v: " << rStarV << std::endl;
+    
+    // if (std::min(rStarC, rStarV) > threshold) {
+    //     if (rStarC < rStarV) {
+    //         ++rcCounter;
+    //     } 
+    //     rcCounter.incrementBase(1);
+    //     return 1;
+    // }
+
+    // return 0;
+
+    float oneOverK = 1.f/100;
+
+    int index = std::min(std::max(0.f, std::floor(std::log(value) / std::log(b))), nbBuffers-1.f);
+
+    float result = 0;
+    float reliability;
+
+
+    for (int curr=0; curr <= index; ++curr) {
+
+        float currScale = spp*oneOverK/powersOfb[curr];
+
+        /* sample counting-based reliability estimation */
+
+        // reliability in 3x3 pixel block (see robustness)
+        float globalReliability = sampleReliability(pos, curr, 1, currScale);
+        // reliability of curent pixel
+        float localReliability = sampleReliability(pos, curr, 0, currScale);
+
+        float reliability = globalReliability - oneOverK;
+        // check if above minimum sampling threshold
+        if (reliability >= 0.)
+            // then use per-pixel reliability
+            reliability = localReliability - oneOverK;
+
+        /* color-based reliability estimation */
+
+        float colorReliability = result * currScale;
+
+        // a minimum image brightness that we always consider reliable
+        colorReliability = std::max(colorReliability, 0.05f * currScale);
+
+        // if not interested in exact expected value estimation, can usually accept a bit
+        // more variance relative to the image brightness we already have
+        // float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
+        // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
+        // colorReliability *= std::mix(std::mix(1.f, cascadeBase, .6f), 1.f, optimizeForError); // needed?
+        
+        reliability = (reliability + colorReliability) * .5f;
+        reliability = math::clamp(reliability, 0.f, 1.f);
+        
+        // allow re-weighting to be disabled esily for the viewer demo
+        // if (!(oneOverK < 1.e6))
+        // 	reliability = 1.;
+
+        result += reliability * buffer.get(pos.x, pos.y, curr);
+    }
+
+    // std::cout << reliability << std::endl;
+
+    if (reliability < threshold) {
+        return 1;
+    } else {
         return 0;
     }
 
-    if (value > maxValue) {
-        return 1;
-    }
-
-    auto ratioAndIndex = calculateRatioAndIndex(value);
-    int index = ratioAndIndex.index;
-    
-    float Emin = 0;
-    for (int j=0; j<=index; j++) {
-        Emin += calcualateOccurencies(pos, j) / spp;
-    }
-
-    auto rStarV = powersOfb[index] / Emin;
-
-    auto rStarC = spp/(calcualateOccurencies(pos, index) - kappaMin);
-    if (rStarC < 0) {
-        rStarC = 1;
-    }
-
-    // std::cout << "r*c: " << rStarC << "  r*v: " << rStarV << std::endl;
-    
-    if (std::min(rStarC, rStarV) > threshold) {
-        if (rStarC < rStarV) {
-            ++rcCounter;
-        } 
-        rcCounter.incrementBase(1);
-        return 1;
-    }
-
-    return 0;
 }
+
+
+// average of <r>-radius pixel block in <layer> at <coord> (only using r=0 and r=1)
+float OutlierDetectorZirr1::sampleLayer(int layer, Point2i pos, const int r, float scale) const {
+	float val = 0;
+	for (int y = -r; y < r; ++y) {
+		for (int x = -r; x < r; ++x) {
+            if (x >= 0 && x < width && y >= 0 && y < height) {
+                float c = buffer.get(pos.x, pos.y, layer);
+                c *= scale;
+                val += c;	
+            }		
+		}
+	}
+	return val / float((2*r+1)*(2*r+1));
+}
+
+// sum of reliabilities in <curr> layer, <prev> layer and <next> layer
+float OutlierDetectorZirr1::sampleReliability(Point2i coord, int curr, const int r, float currScale) const {
+	float rel = sampleLayer(curr, coord, r, currScale);
+	if (curr != 0)
+		// scale by N/kappa / b^i_<pref>
+		rel += sampleLayer(curr-1, coord, r, currScale * b);
+	if (curr < nbBuffers-1)
+		// scale by N/kappa / b^i_<next>
+		rel += sampleLayer(curr+1, coord, r, currScale / b);
+	// reliability is simply the luminance of the brightness-normalized layer pixels
+	return rel;
+}
+
 
 RatioAndIndex OutlierDetectorZirr1::calculateRatioAndIndex(float value) const {
     int j = std::floor(std::log(value) / std::log(b)); //TODO: store 1/log(beta)

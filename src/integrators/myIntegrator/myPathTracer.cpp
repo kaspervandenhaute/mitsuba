@@ -70,8 +70,8 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
-    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
     // detector = new ThresholdDetector();
     // detector = new TestOutlierDetector();
 
@@ -114,18 +114,18 @@ void MyPathTracer::pathTracing(Scene *scene, RenderQueue *queue, const RenderJob
 void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJob *job, 
     int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID) {
     
-    int spp = samplesPerPixel;
-    samplesPerPixel = 1;
+    // int spp = samplesPerPixel;
+    // samplesPerPixel = 1;
 
-    for (int i=0; i<spp; ++i) {
-        pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID); 
-        detector->update(pathSeeds, computeMltBudget()/m_config.nMutations, i);
-        pathSeeds.clear();
-    }
-    weightedAvg.reset();
-    unweightedAvg.reset();
+    // for (int i=0; i<spp; ++i) {
+    //     pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID); 
+    //     detector->update(pathSeeds, computeMltBudget()/m_config.nMutations, i);
+    //     pathSeeds.clear();
+    // }
+    // weightedAvg.reset();
+    // unweightedAvg.reset();
 
-    // pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
 }
 
 
@@ -226,7 +226,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     if (intermediatePeriod != -1) {
         mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-        writeAvos("/mnt/g/Documents/00-school/master/thesis/prentjes/test/");
+        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
     }
 
     clearResults();
@@ -289,8 +289,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             detector->contribute(position, luminance);
             
-            auto weight = detector->calculateWeight(position, luminance);
-                
+            auto weight = detector->calculateWeight(position, luminance); // TODO not thread save
+
             weighted += weight*luminance;
             unweighted += luminance;
 
@@ -393,7 +393,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
  void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const {
 
-    std::ofstream myfile ("/mnt/g/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
+    std::ofstream myfile ("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
     if (myfile.is_open())
     {
         if (iteration == 0) {

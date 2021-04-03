@@ -93,7 +93,7 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
 void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
-    setAdditionalThreshold(seeds, nChains); //TODO
+    // setAdditionalThreshold(seeds, nChains); //TODO
     spp = newSpp;
 }
 

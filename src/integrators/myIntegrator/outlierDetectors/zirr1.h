@@ -23,13 +23,16 @@ private:
     float calcualateOccurencies(Point2i const& pos, int index) const;
     RatioAndIndex calculateRatioAndIndex(float value) const;
 
+    float sampleReliability(Point2i coord, int curr, const int r, float currScale) const;
+    float sampleLayer(int layer, Point2i coord, const int r, float scale) const;
+
     const int width, height;
     const float b;
     const int kappaMin;
     float threshold;
     const int nbBuffers;
     Bitmap3d<float> buffer, tempBuffer;
-    int spp;
+    float spp;
     std::vector<float> powersOfb;
     float Emin;
     float cascadeStart = 1;

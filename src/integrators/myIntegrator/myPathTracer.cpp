@@ -123,6 +123,7 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
         pathSeeds.clear();
     }
     weightedAvg.reset();
+    unweightedAvg.reset();
 
     // pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
 }
@@ -197,9 +198,13 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             if (process->getReturnStatus() != ParallelProcess::ESuccess) {
                 Log(EError, "Error while mlting.");
             }    
-        }             
+        }     
 
         writeStatisticsToFile(pathSeeds.size(), nbOfChains, mltStats);
+
+        // reset r
+        weightedAvg.reset();        
+        unweightedAvg.reset();        
 
         // update the detector for the next iteration.
         detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
@@ -221,7 +226,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     if (intermediatePeriod != -1) {
         mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
+        writeAvos("/mnt/g/Documents/00-school/master/thesis/prentjes/test/");
     }
 
     clearResults();
@@ -388,7 +393,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
  void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const {
 
-    std::ofstream myfile ("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
+    std::ofstream myfile ("/mnt/g/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
     if (myfile.is_open())
     {
         if (iteration == 0) {

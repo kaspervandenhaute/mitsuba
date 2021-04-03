@@ -381,14 +381,14 @@ ParallelProcess::EStatus PSSMLTProcess::generateWork(WorkUnit *unit, int worker)
                   static_cast<int64_t>(m_timeoutTimer->getMilliseconds()));
     }
 
-    if (m_workCounter >= m_config.workUnits || timeout < 0)
+    if (m_workCounter >= (unsigned int) m_config.workUnits || timeout < 0)
         return EFailure;
 
     PositionedSeedWorkUnit *workUnit = static_cast<PositionedSeedWorkUnit *>(unit);
 
     // compute the number of seeds the new workunit will work on
-    int nSeeds = m_seeds.size() / m_config.workUnits;
-    int rest = m_seeds.size() % m_config.workUnits;
+    unsigned int nSeeds = m_seeds.size() / m_config.workUnits;
+    unsigned int rest = m_seeds.size() % m_config.workUnits;
     auto startSeed = nSeeds * m_workCounter;
     auto endSeed = startSeed + nSeeds;
 

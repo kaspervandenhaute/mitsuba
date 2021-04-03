@@ -30,10 +30,10 @@
 MTS_NAMESPACE_BEGIN
 
 struct MltStats {
-    int nMutations;
-    int nRejections;
-    int nRejectionDomain;
-    int nRejectionDomainMinValue;
+    uint64_t nMutations;
+    uint64_t nRejections;
+    uint64_t nRejectionDomain;
+    uint64_t nRejectionDomainMinValue;
 };
 
 
@@ -70,7 +70,7 @@ private:
     const std::vector<PositionedPathSeed> &m_seeds;
     ref<Mutex> m_resultMutex;
     ref<Film> m_film;
-    int m_resultCounter, m_workCounter;
+    unsigned int m_resultCounter, m_workCounter;
     unsigned int m_refreshTimeout;
     ref<Timer> m_timeoutTimer, m_refreshTimer;
     ref<Bitmap> mlt_result;

@@ -20,8 +20,6 @@ public:
     void update(int newSpp) override;
 
 private:
-    float calcualateOccurencies(Point2i const& pos, int index) const;
-    RatioAndIndex calculateRatioAndIndex(float value) const;
 
     float sampleReliability(Point2i coord, int curr, const int r, float currScale) const;
     float sampleLayer(int layer, Point2i coord, const int r, float scale) const;

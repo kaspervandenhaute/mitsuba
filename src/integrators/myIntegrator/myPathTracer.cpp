@@ -126,6 +126,7 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
     // unweightedAvg.reset();
 
     pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    pathSeeds.clear();
 }
 
 
@@ -288,22 +289,23 @@ void MyPathTracer::renderBlock(const Scene *scene,
             // Log(EInfo, "Index: %i    Luminance: %f", index, splatList.splats[0].second.getLuminance());
             
             detector->contribute(position, luminance);
-            
-            auto weight = detector->calculateWeight(position, luminance); // TODO not thread save
-
-            weighted += weight*luminance;
-            unweighted += luminance;
-
-            if (weight > 0) {
-                localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
-            } else {
-                inlierMinValue.incrementBase();
-                if (detector->minValue < luminance) {
-                    ++inlierMinValue;
-                }
-            }
 
             if (iteration != 0) {
+            
+                auto weight = detector->calculateWeight(position, luminance); // TODO not thread save
+
+                weighted += weight*luminance;
+                unweighted += luminance;
+
+                if (weight > 0) {
+                    localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
+                } else {
+                    inlierMinValue.incrementBase();
+                    if (detector->minValue < luminance) {
+                        ++inlierMinValue;
+                    }
+                }
+            
                 block->put(position, spec * (1-weight) * invSpp, 1);              
             }
 

@@ -12,7 +12,7 @@ MTS_NAMESPACE_BEGIN
 class OutlierDetectorZirr1 : public OutlierDetector {
 
 public:
-    OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappaMin, float threshold);
+    OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappa, float threshold);
 
     void contribute(Point2 const& pos, float value) override;
     float calculateWeight(Point2 const& pos, float value) const override;
@@ -26,7 +26,7 @@ private:
 
     const int width, height;
     const float b;
-    const int kappaMin;
+    float oneOverK;
     float threshold;
     const int nbBuffers;
     Bitmap3d<float> buffer, tempBuffer;
@@ -34,6 +34,7 @@ private:
     std::vector<float> powersOfb;
     float Emin;
     float cascadeStart = 1;
+    
 };
 
 MTS_NAMESPACE_END

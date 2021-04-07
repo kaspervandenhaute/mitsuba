@@ -296,6 +296,7 @@ private:
     Sampler *sampler;
     size_t nCores;
     Vector2i cropSize;
+    int kappa;
 
     Properties props;
     int nPoints, nSubPoints;

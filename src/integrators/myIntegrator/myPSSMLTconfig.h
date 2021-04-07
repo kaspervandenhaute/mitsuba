@@ -18,6 +18,7 @@ struct MYPSSMLTConfiguration {
     Float mutationSizeLow;
     Float mutationSizeHigh;
     size_t timeout;
+    int kappa;
 
     inline MYPSSMLTConfiguration() { }
 

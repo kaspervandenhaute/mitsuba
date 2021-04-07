@@ -71,7 +71,7 @@ void MyPathTracer::renderSetup(Scene *scene,
         Log(EError, "No support for time samples at this time!");
 
     // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
-    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, 3, outlierDetectorThreshold);
+    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, kappa, outlierDetectorThreshold);
     // detector = new ThresholdDetector();
     // detector = new TestOutlierDetector();
 
@@ -126,7 +126,11 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
     // unweightedAvg.reset();
 
     pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    detector->update(samplesPerPixel);
     pathSeeds.clear();
+
+    // Set the spp back to the requested value after initialisation
+    samplesPerPixel = sampler->getSampleCount();
 }
 
 
@@ -140,9 +144,6 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     // Initialise the outlier detector
     initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
-
-    // Set the spp back to the requested value after initialisation
-    samplesPerPixel = sampler->getSampleCount();
 
     for (iteration=1; iteration<iterations; ++iteration) {
 
@@ -208,7 +209,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         unweightedAvg.reset();        
 
         // update the detector for the next iteration.
-        detector->update(pathSeeds, nbOfChains, samplesPerPixel*(iteration+1));
+        detector->update(pathSeeds, nbOfChains, samplesPerPixel);
         pathSeeds.clear();
 
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
@@ -340,6 +341,7 @@ void MyPathTracer::init() {
         m_config.workUnits = props.getInteger("workUnits", -1);
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
+        kappa = props.getInteger("kappa", 1);
 
         iterations = props.getInteger("iterations", 10);
         outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);

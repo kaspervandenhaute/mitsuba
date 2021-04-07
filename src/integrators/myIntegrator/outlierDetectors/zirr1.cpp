@@ -5,9 +5,12 @@
 
 MTS_NAMESPACE_BEGIN
 
+float sumReliabilities = 0;
+int64_t countReliabilities = 0;
 
-OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappaMin, float threshold) :
-        OutlierDetector(0.5, maxValue), width(width), height(height), b(b), kappaMin(kappaMin), threshold(threshold), 
+
+OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappa, float threshold) :
+        OutlierDetector(0.5, maxValue), width(width), height(height), b(b), oneOverK(1.f/kappa), threshold(threshold), 
         nbBuffers(std::ceil(std::log(maxValue)/std::log(b))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
         std::cout << nbBuffers << "  " << std::ceil(std::log(maxValue)) << std::endl;
         powersOfb[0] = 1;
@@ -66,8 +69,6 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
         return 1;
     }
 
-    float oneOverK = 1.f/100;
-
     int index = std::min(std::max(0.f, std::floor(std::log(value) / std::log(b))), nbBuffers-1.f);
 
     float result = 0;
@@ -99,15 +100,20 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
         // if not interested in exact expected value estimation, can usually accept a bit
         // more variance relative to the image brightness we already have
-        float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
+        // float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
         // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
-        colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
+        // colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
         
-        reliability = (reliability + colorReliability) * .5f;
+        // reliability = (reliability + colorReliability) * .5f;
+        reliability = std::max(reliability, colorReliability);
+
         reliability = math::clamp(reliability, 0.f, 1.f);
 
         result += reliability * buffer.get(pos.x, pos.y, curr);
     }
+
+    sumReliabilities += reliability;
+    ++countReliabilities;
 
     if (reliability < threshold) {
         return 1;
@@ -156,7 +162,12 @@ void OutlierDetectorZirr1::update(std::vector<PositionedPathSeed> const& seeds, 
 void OutlierDetectorZirr1::update(int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
-    spp = newSpp;
+    spp += newSpp;
+
+    std::cout << "Avg reliablility: " << sumReliabilities/countReliabilities << std::endl;
+
+    sumReliabilities = 0;
+    countReliabilities = 0;
 }
 
 

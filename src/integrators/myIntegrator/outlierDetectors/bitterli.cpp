@@ -100,7 +100,7 @@ void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seed
 void OutlierDetectorBitterly::update(int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
-    spp = newSpp;
+    spp += newSpp;
 }
 
 void OutlierDetectorBitterly::setAdditionalThreshold(std::vector<PositionedPathSeed> const& allSeeds, size_t nChains) {

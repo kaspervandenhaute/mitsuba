@@ -19,6 +19,8 @@
 #include "outlierDetectors/testDetector.h"
 #include "outlierDetectors/thresholdDetector.h"
 
+// #define THESISLOCATION std::string("/mnt/c/Users/beast/Documents/00-school/master/thesis/")
+#define THESISLOCATION std::string("/mnt/g/Documents/00-school/master/thesis/")
 
 
 MTS_NAMESPACE_BEGIN
@@ -212,10 +214,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         pathSeeds.clear();
 
         if (intermediatePeriod > 0 && iteration != 0 && iteration % intermediatePeriod == 0) {
-            writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
+            writeAvos(THESISLOCATION + "prentjes/test/avos/", std::to_string(iteration));
         }
-
-        
     }
 
     if (intermediatePeriod != 0) {
@@ -227,7 +227,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     if (intermediatePeriod != -1) {
         mltResult->scale(1.f/samplesPerPixel); //TODO: Why?
-        writeAvos("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/");
+        writeAvos(THESISLOCATION + "prentjes/test/");
     }
 
     clearResults();
@@ -395,7 +395,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
  void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const {
 
-    std::ofstream myfile ("/mnt/c/Users/beast/Documents/00-school/master/thesis/prentjes/test/stat_output.txt", std::ios::app);
+    std::ofstream myfile (THESISLOCATION + "prentjes/test/stat_output.txt", std::ios::app);
     if (myfile.is_open())
     {
         if (iteration == 0) {

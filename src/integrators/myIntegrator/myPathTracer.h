@@ -169,29 +169,30 @@ private:
         return (uint64_t) XXH3_64bits_withSeed((void*) buffer, sizeof(int)*3, 0);
     }
 
-    void writeAvos(std::string const& path) {
+    void writeAvos(std::string const& path, std::string const& tag= "") {
+
         auto result = mltResult->clone();
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "total.exr");
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "total" + tag + ".exr");
 
         mltResult->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt.exr");
+        BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt" + tag + ".exr");
 
         result->clear();
         result->accumulate(seedsResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "seeds.exr");
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "seeds" + tag + ".exr");
 
         result->clear();
         result->accumulate(outliersResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outliers.exr");
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outliers" + tag + ".exr");
 
         result->clear();
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "path.exr");
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "path" + tag + ".exr");
     }
 
     void writeTotal(std::string const& path) {

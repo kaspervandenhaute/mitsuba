@@ -66,14 +66,15 @@ void MyPathTracer::renderSetup(Scene *scene,
     pathResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
     seedsResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
     outliersResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
+    outlierDomain = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
-    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, kappa, outlierDetectorThreshold);
+    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, kappa, outlierDetectorThreshold);
     // detector = new ThresholdDetector();
     // detector = new TestOutlierDetector();
 
@@ -261,6 +262,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     auto invSpp = 1.f/samplesPerPixel;
 
+    bool extra = false;
+
 
     for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
@@ -269,7 +272,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
         sampler->generate(offset);
 
-        for (size_t j = 0; j<samplesPerPixel; j++) {
+        for (size_t j = 0; j<samplesPerPixel + 100; j++) {
+
+            if (j >= samplesPerPixel) {
+                extra = true;
+            }
 
             // hash function is only needed for repeatability
             // auto seed = createSeed(offset);
@@ -291,7 +298,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             detector->contribute(position, luminance);
 
-            if (iteration != 0) {
+            if (iteration != 0 && !extra) {
             
                 auto weight = detector->calculateWeight(position, luminance); // TODO not thread save
 
@@ -306,8 +313,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
                         ++inlierMinValue;
                     }
                 }
-            
                 block->put(position, spec * (1-weight) * invSpp, 1);              
+            }
+
+            if (iteration != 0 && !extra) {
+
             }
 
             sampler->advance();

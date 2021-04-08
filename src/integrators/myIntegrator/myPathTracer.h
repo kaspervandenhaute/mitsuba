@@ -180,14 +180,20 @@ private:
         BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt" + tag + ".exr");
 
         result->clear();
-        result->accumulate(seedsResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->accumulate(seedsResult->getBitmap(), Point2i(seedsResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "seeds" + tag + ".exr");
 
         result->clear();
-        result->accumulate(outliersResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->accumulate(outliersResult->getBitmap(), Point2i(outliersResult->getBorderSize()), Point2i(0.f), result->getSize());
         result->scale(1.f/iterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outliers" + tag + ".exr");
+
+        result->clear();
+        result->accumulate(outlierDomain->getBitmap(), Point2i(outlierDomain->getBorderSize()), Point2i(0.f), result->getSize());
+        result->accumulate(outliersResult->getBitmap(), Point2i(outliersResult->getBorderSize()), Point2i(0.f), result->getSize());
+        result->scale(1.f/iterations);
+        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outlierDomain" + tag + ".exr");
 
         result->clear();
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
@@ -285,6 +291,7 @@ private:
     ref<Bitmap> mltResult;
     ref<ImageBlock> outliersResult;
     ref<ImageBlock> seedsResult;
+    ref<ImageBlock> outlierDomain;
     Float outlierDetectorThreshold;
     int intermediatePeriod;
     std::string intermediatePath;

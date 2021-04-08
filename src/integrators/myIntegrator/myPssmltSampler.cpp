@@ -16,7 +16,7 @@
     along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "myPSSMLTSampler.h"
+#include "myPssmltSampler.h"
 
 MTS_NAMESPACE_BEGIN
 

@@ -12,6 +12,8 @@ class TestOutlierDetector : public OutlierDetector {
 
 public:
 
+    TestOutlierDetector() : OutlierDetector(0,0) {}
+
     void contribute(Point2 const& pos, float value) override;
     inline float calculateWeight(Point2 const& posFloat, float value) const override;
 

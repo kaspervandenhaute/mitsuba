@@ -100,12 +100,12 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
         // if not interested in exact expected value estimation, can usually accept a bit
         // more variance relative to the image brightness we already have
-        // float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
+        float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
         // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
-        // colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
+        colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
         
-        // reliability = (reliability + colorReliability) * .5f;
-        reliability = std::max(reliability, colorReliability);
+        reliability = (reliability + colorReliability) * .5f;
+        // reliability = std::max(reliability, colorReliability);
 
         reliability = math::clamp(reliability, 0.f, 1.f);
 

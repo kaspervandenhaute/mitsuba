@@ -19,8 +19,8 @@
 #include "outlierDetectors/testDetector.h"
 #include "outlierDetectors/thresholdDetector.h"
 
-// #define THESISLOCATION std::string("/mnt/c/Users/beast/Documents/00-school/master/thesis/")
-#define THESISLOCATION std::string("/mnt/g/Documents/00-school/master/thesis/")
+#define THESISLOCATION std::string("/mnt/c/Users/beast/Documents/00-school/master/thesis/")
+// #define THESISLOCATION std::string("/mnt/g/Documents/00-school/master/thesis/")
 
 
 MTS_NAMESPACE_BEGIN
@@ -73,10 +73,10 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
     // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, kappa, outlierDetectorThreshold);
     // detector = new ThresholdDetector();
-    // detector = new TestOutlierDetector();
+    detector = new TestOutlierDetector();
 
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
         " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
@@ -116,6 +116,8 @@ void MyPathTracer::pathTracing(Scene *scene, RenderQueue *queue, const RenderJob
 
 void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJob *job, 
     int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID) {
+
+    iteration = 0;
     
     // int spp = samplesPerPixel;
     // samplesPerPixel = 1;
@@ -257,6 +259,8 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
+    SplatList splatList;
+
     float weighted = 0;
     float unweighted = 0;
 
@@ -270,23 +274,21 @@ void MyPathTracer::renderBlock(const Scene *scene,
         if (stop)
             break;
 
+        // hash function is only needed for repeatability
+        // auto seed = createSeed(offset);
+        auto seed = random->nextULong();
+        sampler->reSeed(seed);
+
         sampler->generate(offset);
 
-        for (size_t j = 0; j<samplesPerPixel + 100; j++) {
+        for (size_t j = 0; j<samplesPerPixel; j++) {
 
             if (j >= samplesPerPixel) {
                 extra = true;
             }
 
-            // hash function is only needed for repeatability
-            // auto seed = createSeed(offset);
-            auto seed = random->nextULong();
-            sampler->reSeed(seed);
-            
             size_t index = sampler->getSampleIndex();
-
-            SplatList splatList;
-
+            
             splatList.clear();
             pathSampler->sampleSplats(offset, splatList);
 
@@ -375,21 +377,22 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
     renderSetup(scene, queue, job, sceneResID, sensorResID, samplerResID);
 
+
     if (props.getInteger("intermediatePeriod", 0) == -1) {
 
-        for (int loop=1; loop<nPoints; ++loop) {
+        for (int loop=0; loop<nPoints; ++loop) {
             float testValue;
             if (exponential) {
-                testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);
+                testValue = minValue + std::pow(10, (1+loop) * std::log(maxValue-minValue)/std::log(10) /nPoints);
             } else {
                 testValue = minValue + loop * (maxValue - minValue)/nPoints;
             }
+
+            init();
             
             // Override the property we want to test
             props.removeProperty(testProperty);
             props.setInteger(testProperty, testValue);
-
-            init();
 
             for (int i=0; i<nSubPoints; ++i) {               
 

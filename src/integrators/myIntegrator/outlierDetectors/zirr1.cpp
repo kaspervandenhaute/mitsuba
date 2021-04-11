@@ -59,7 +59,7 @@ void OutlierDetectorZirr1::contribute(Point2 const& posFloat, float value) {
         tempBuffer.add(pos.x, pos.y, baseIndex+1, value*weightUpper);
     }
 }
-  
+   
 
 float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value) const {
     auto pos = discretePosition(posFloat);
@@ -67,6 +67,10 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
     if (value > maxValue) {
         return 1;
+    }
+
+    if (value < minValue) {
+        return 0;
     }
 
     int index = std::min(std::max(0.f, std::floor(std::log(value) / std::log(b))), nbBuffers-1.f);
@@ -104,8 +108,8 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
         // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
         colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
         
-        reliability = (reliability + colorReliability) * .5f;
-        // reliability = std::max(reliability, colorReliability);
+        // reliability = (reliability + colorReliability) * .5f;
+        reliability = std::min(reliability, colorReliability);
 
         reliability = math::clamp(reliability, 0.f, 1.f);
 

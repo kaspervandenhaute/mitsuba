@@ -73,11 +73,6 @@ void MyPathTracer::renderSetup(Scene *scene,
     if (sensor->needsTimeSample())
         Log(EError, "No support for time samples at this time!");
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300);
-    // detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 250, kappa, outlierDetectorThreshold);
-    // detector = new ThresholdDetector();
-    detector = new TestOutlierDetector();
-
     Log(EInfo, "Starting render job (%ix%i, " SIZE_T_FMT " %s, " SIZE_T_FMT
         " %s, " SSE_STR ") ..", cropSize.x, cropSize.y,
         samplesPerPixel, samplesPerPixel == 1 ? "sample" : "samples", nCores,
@@ -134,6 +129,8 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
     detector->update(samplesPerPixel);
     pathSeeds.clear();
 
+    cost += samplesTotal;
+
     // Set the spp back to the requested value after initialisation
     samplesPerPixel = sampler->getSampleCount();
 }
@@ -144,6 +141,11 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     int mltSamplerResID, rplSamplerResID;
     initialiseSamplers(mltSamplerResID, rplSamplerResID);
+
+    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 16, 0.5, 2, 300);
+    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold);
+    // detector = new ThresholdDetector();
+    // detector = new TestOutlierDetector();
 
     int integratorResID = sched->registerResource(this);
 
@@ -318,10 +320,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 block->put(position, spec * (1-weight) * invSpp, 1);              
             }
 
-            if (iteration != 0 && !extra) {
-
-            }
-
             sampler->advance();
         }
     }
@@ -383,16 +381,16 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
         for (int loop=0; loop<nPoints; ++loop) {
             float testValue;
             if (exponential) {
-                testValue = minValue + std::pow(10, (1+loop) * std::log(maxValue-minValue)/std::log(10) /nPoints);
+                testValue = minValue + std::pow(10, loop * std::log(maxValue-minValue)/std::log(10) /nPoints);
             } else {
                 testValue = minValue + loop * (maxValue - minValue)/nPoints;
             }
-
-            init();
             
             // Override the property we want to test
             props.removeProperty(testProperty);
             props.setInteger(testProperty, testValue);
+
+            init();
 
             for (int i=0; i<nSubPoints; ++i) {               
 
@@ -402,6 +400,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
             }
         }
     } else {
+        init();
         myRender(scene, queue, job, sceneResID, sensorResID, samplerResID);
     }
 

@@ -132,7 +132,7 @@ public:
 
 private:
     /// Draw nChains samples from allSeeds proportional to their luminance. Samples can be chosen multiple times.
-    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains, Sampler* sampler) const {
+    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains) const {
         
         DiscreteDistribution seedDistribution(allSeeds.size());
         for (auto& seed : allSeeds) {
@@ -145,7 +145,7 @@ private:
         seeds.reserve(nChains);
         for (size_t i=0; i<nChains; ++i) {
             Float pdf;
-            auto index = seedDistribution.sample(sampler->next1D(), pdf);
+            auto index = seedDistribution.sample(random->nextFloat(), pdf);
             auto seed = allSeeds[index];
             seed.pdf = pdf;
             seeds.push_back(seed);                    

@@ -129,8 +129,6 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
     detector->update(samplesPerPixel);
     pathSeeds.clear();
 
-    cost += samplesTotal;
-
     // Set the spp back to the requested value after initialisation
     samplesPerPixel = sampler->getSampleCount();
 }
@@ -142,10 +140,12 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     int mltSamplerResID, rplSamplerResID;
     initialiseSamplers(mltSamplerResID, rplSamplerResID);
 
-    // detector = new OutlierDetectorBitterly(cropSize.x, cropSize.y, 16, 0.5, 2, 300);
-    detector = new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold);
-    // detector = new ThresholdDetector();
-    // detector = new TestOutlierDetector();
+    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300));
+    // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
+    // auto tempDetector = new ThresholdDetector();
+    // auto tempDetector = new TestOutlierDetector();
+    detector = new SoftDetector(std::move(tempDetector), detectorSoftness);
+
 
     int integratorResID = sched->registerResource(this);
 
@@ -163,7 +163,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         // mlt budget is nb chains * nb mutations
         auto mltBudget = computeMltBudget();
         // if there are seeds, samples have been discarded. They need to be put back
-        nbOfChains = pathSeeds.size() > 0 ? std::max(mltBudget / m_config.nMutations, (size_t) 1) : 0;
+        nbOfChains = pathSeeds.size() > 0 ? std::max((mltBudget + m_config.nMutations -1) / m_config.nMutations, (size_t) 1) : 0;
 
         // actual mlt budget
         mltBudget = nbOfChains * m_config.nMutations;
@@ -174,7 +174,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
 
             // Pick seeds proportional to their luminance
-            auto seeds = drawSeeds(pathSeeds, nbOfChains, sampler);
+            auto seeds = drawSeeds(pathSeeds, nbOfChains);
 
             updateOutlierSeedsStats(pathSeeds, seeds, outlierCounter, seedCounter);
 
@@ -242,6 +242,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
     sched->unregisterResource(rplSamplerResID);
     sched->unregisterResource(integratorResID);
+
+    delete detector;
     
     return true;
 }
@@ -268,9 +270,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     auto invSpp = 1.f/samplesPerPixel;
 
-    bool extra = false;
-
-
     for (size_t i = 0; i<points.size(); ++i) {
         Point2i offset = Point2i(points[i]) + Vector2i(block->getOffset());
         if (stop)
@@ -284,11 +283,6 @@ void MyPathTracer::renderBlock(const Scene *scene,
         sampler->generate(offset);
 
         for (size_t j = 0; j<samplesPerPixel; j++) {
-
-            if (j >= samplesPerPixel) {
-                extra = true;
-            }
-
             size_t index = sampler->getSampleIndex();
             
             splatList.clear();
@@ -302,24 +296,29 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             detector->contribute(position, luminance);
 
-            if (iteration != 0 && !extra) {
+            if (iteration != 0 && !(j >= samplesPerPixel)) {
             
-                auto weight = detector->calculateWeight(position, luminance); // TODO not thread save
-
+                auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
+        
                 weighted += weight*luminance;
                 unweighted += luminance;
+
+                block->put(position, spec * (1-weight) * invSpp, 1); 
 
                 if (weight > 0) {
                     localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
                 } else {
                     inlierMinValue.incrementBase();
-                    if (detector->minValue < luminance) {
+                    if (detector->getMin() <= luminance) {
                         ++inlierMinValue;
                     }
-                }
-                block->put(position, spec * (1-weight) * invSpp, 1);              
+                }              
             }
-
+            else if (iteration != 0 && j >= samplesPerPixel) {
+                auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
+                outlierDomain->put(position, spec * weight * invSpp, 1);
+            }
+            
             sampler->advance();
         }
     }
@@ -351,7 +350,8 @@ void MyPathTracer::init() {
         m_config.workUnits = props.getInteger("workUnits", -1);
         /* Stop MLT after X seconds -- useful for equal-time comparisons */
         m_config.timeout = props.getInteger("timeout", 0);
-        kappa = props.getInteger("kappa", 1);
+        kappa = props.getFloat("kappa", 1);
+        detectorSoftness = props.getFloat("detectorSoftness", 0.01);
 
         iterations = props.getInteger("iterations", 10);
         outlierDetectorThreshold = props.getFloat("outlierThreshold", 1);
@@ -388,11 +388,12 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
             
             // Override the property we want to test
             props.removeProperty(testProperty);
-            props.setInteger(testProperty, testValue);
+            props.setFloat(testProperty, testValue);
 
-            init();
+            
 
-            for (int i=0; i<nSubPoints; ++i) {               
+            for (int i=0; i<nSubPoints; ++i) {    
+                init();           
 
                 intermediatePath = props.getString("intermediatePath") + std::to_string(loop) + "-" + std::to_string(i) + "-";
 
@@ -425,7 +426,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
         myfile << "\"nSeeds\": " << nSeeds << ", ";
         myfile << "\"cost\": " << cost << ", ";
         myfile << "\"r\": " << weightedAvg.get() / unweightedAvg.get() << ", ";
-        myfile << "\"minValue\": " << detector->minValue << ", ";
+        myfile << "\"minValue\": " << detector->getMin() << ", ";
         myfile << "\"nMutations\": " << mltStats.nMutations << ", ";
         myfile << "\"nRejections\": " << mltStats.nRejections << ", ";
         myfile << "\"nRejectionDomain\": " << mltStats.nRejectionDomain << ", ";

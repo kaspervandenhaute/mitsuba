@@ -21,6 +21,8 @@ public:
 
     inline Point2i discretePosition(Point2 const& pos) const {
         return Point2i(pos.x - 0.5f, pos.y - 0.5f);
+        // return Point2i(std::ceil(pos.x - 0.5f), std::ceil(pos.y - 0.5f));
+        // return Point2i(std::floor(pos.x), std::floor(pos.y));
     }
 
     float minValue, maxValue;

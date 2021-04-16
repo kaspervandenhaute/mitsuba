@@ -2,22 +2,26 @@
 #ifndef SOFTDETECTOR_H
 #define SOFTDETECTOR_H
 
+#include <memory>
 
-class SoftDetector : public OutlierDetector {
+#include "outlierDetector.h"
+#include <mitsuba/core/random.h>
+
+MTS_NAMESPACE_BEGIN
+
+class SoftDetector {
 
 public:
 
-    SoftDetector(OutlierDetector* detector, float softness) : 
-        OutlierDetector(detector->min, detector->max), 
-        detector(detector), 
-        random(new Random()), 
-        softness(sofness) {}
+    SoftDetector(std::unique_ptr<OutlierDetector> detector, float softness) : 
+        detector(std::move(detector)), 
+        softness(softness) {}
 
-    virtual void contribute(Point2 const& pos, float value) {
+    inline void contribute(Point2 const& pos, float value) {
         detector->contribute(pos, value);
     }
 
-    virtual float calculateWeight(Point2 const& pos, float value) const {
+    inline float calculateWeight(Point2 const& pos, float value, float rand) const {
         auto weight = detector->calculateWeight(pos, value);
 
         // If it is an outlier keep it that way
@@ -25,26 +29,34 @@ public:
             return weight;
         }
         // If it is an inlier there is a <softness> chance of returning it as an outlier
-        if (random->nextFloat() < softness) {
+        if (rand < softness) {
             return 1;
         }
         return 0;
     }
 
-    virtual void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
+    inline void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
         detector->update(seeds, nChains, newSpp);
     }
 
-    virtual void update(int newSpp) {
+    inline void update(int newSpp) {
         detector->update(newSpp);
+    }
+
+    inline float getMin() const {
+        return detector->minValue;
+    }
+
+    inline float getMax() const {
+        return detector->maxValue;
     }
 
 
 private:
-    ref<OutlierDetector> detector;
-    ref<Random> random;
+    std::unique_ptr<OutlierDetector> detector;
     float softness;
-}
+};
 
+MTS_NAMESPACE_END
 
 #endif

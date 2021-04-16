@@ -9,6 +9,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <memory>
 
 #include "my_pathSeed.h"
 #include "xxHash/xxhash.h"
@@ -16,7 +17,7 @@
 #include "myPssmltSampler.h"
 #include "myRplSampler.h"
 
-#include "outlierDetectors/outlierDetector.h"
+#include "outlierDetectors/softDetector.h"
 #include "myPSSMLTconfig.h"
 
 
@@ -132,7 +133,7 @@ public:
 
 private:
     /// Draw nChains samples from allSeeds proportional to their luminance. Samples can be chosen multiple times.
-    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains) const {
+    inline std::vector<PositionedPathSeed> drawSeeds(std::vector<PositionedPathSeed>& allSeeds, size_t nChains) {
         
         DiscreteDistribution seedDistribution(allSeeds.size());
         for (auto& seed : allSeeds) {
@@ -283,7 +284,7 @@ private:
     std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
     Vector2 invSize;
-    ref<OutlierDetector> detector;
+    SoftDetector* detector;
     int iteration, iterations;
     Average<Float> unweightedAvg, weightedAvg;
     ref<Mutex> seedMutex;
@@ -305,6 +306,7 @@ private:
     size_t nCores;
     Vector2i cropSize;
     int kappa;
+    float detectorSoftness;
 
     Properties props;
     int nPoints, nSubPoints;

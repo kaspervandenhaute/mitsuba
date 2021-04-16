@@ -12,7 +12,7 @@ MTS_NAMESPACE_BEGIN
 class OutlierDetectorZirr1 : public OutlierDetector {
 
 public:
-    OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappa, float threshold);
+    OutlierDetectorZirr1(int width, int height, float b, float maxValue, float kappa, float threshold);
 
     void contribute(Point2 const& pos, float value) override;
     float calculateWeight(Point2 const& pos, float value) const override;

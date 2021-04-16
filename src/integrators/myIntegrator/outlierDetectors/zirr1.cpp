@@ -9,8 +9,8 @@ float sumReliabilities = 0;
 int64_t countReliabilities = 0;
 
 
-OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, int kappa, float threshold) :
-        OutlierDetector(0.5, maxValue), width(width), height(height), b(b), oneOverK(1.f/kappa), threshold(threshold), 
+OutlierDetectorZirr1::OutlierDetectorZirr1(int width, int height, float b, float maxValue, float kappa, float threshold) :
+        OutlierDetector(0, maxValue), width(width), height(height), b(b), oneOverK(1.f/kappa), threshold(threshold), 
         nbBuffers(std::ceil(std::log(maxValue)/std::log(b))), buffer(width, height, nbBuffers), tempBuffer(width, height, nbBuffers), spp(0), powersOfb(nbBuffers) {
         std::cout << nbBuffers << "  " << std::ceil(std::log(maxValue)) << std::endl;
         powersOfb[0] = 1;
@@ -104,14 +104,17 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
 
         // if not interested in exact expected value estimation, can usually accept a bit
         // more variance relative to the image brightness we already have
-        float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
+        // float optimizeForError = std::max(.0f, std::min(1.f, oneOverK));
         // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
-        colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
+        // colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
         
-        // reliability = (reliability + colorReliability) * .5f;
-        reliability = std::min(reliability, colorReliability);
-
-        reliability = math::clamp(reliability, 0.f, 1.f);
+        if (curr != index) {
+            reliability = (reliability + colorReliability) * .5f; 
+            reliability = math::clamp(reliability, 0.f, 1.f);     
+        } else {
+            reliability = std::min(reliability, colorReliability);
+        }
+         
 
         result += reliability * buffer.get(pos.x, pos.y, curr);
     }
@@ -119,7 +122,7 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
     sumReliabilities += reliability;
     ++countReliabilities;
 
-    if (reliability < threshold) {
+    if (reliability <= threshold) {
         return 1;
     } else {
         return 0;

@@ -283,13 +283,12 @@ void PathSampler::sampleSplats(const Point2i &offset, SplatList &list) {
 
                 const Vector2i cropSize = sensor->getFilm()->getCropSize();
                 Point2 samplePos = m_sensorSampler->next2D();
-                if (offset == Point2i(-1)) {
-                    // std::cout << samplePos.toString() << std::endl;
+                // Use this to turn off anti alliasing, this will break mlt
+                // Point2 samplePos = Point2(0.5f, 0.5f);
 
+                if (offset == Point2i(-1)) {
                     samplePos.x *= cropSize.x;
                     samplePos.y *= cropSize.y;
-                    // std::cout << samplePos.toString() << std::endl;
-
                 } else {
                     samplePos.x += offset.x;
                     samplePos.y += offset.y;

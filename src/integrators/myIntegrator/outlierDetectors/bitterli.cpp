@@ -6,7 +6,7 @@
 MTS_NAMESPACE_BEGIN
 
 OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue) :
-        OutlierDetector(0.5, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
+        OutlierDetector(0, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
         buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0) {
 }
 
@@ -93,7 +93,7 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
 void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
-    setAdditionalThreshold(seeds, nChains); //TODO
+    // setAdditionalThreshold(seeds, nChains); //TODO
     spp = newSpp;
 }
 

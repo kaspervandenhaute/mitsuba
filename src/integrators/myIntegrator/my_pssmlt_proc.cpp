@@ -48,7 +48,7 @@ StatsCounter forcedAcceptance("Primary sample space MLT",
 
 class PSSMLTRenderer : public WorkProcessor {
 public:
-    PSSMLTRenderer(const MYPSSMLTConfiguration &conf, OutlierDetector const* outlierDetector)
+    PSSMLTRenderer(const MYPSSMLTConfiguration &conf, SoftDetector const* outlierDetector)
         : m_config(conf), m_outlierDetector(outlierDetector) {
     }
 
@@ -122,6 +122,8 @@ public:
             number stream at the appropriate position. Afterwards, revert
             back to this worker's own source of random numbers */
 
+            // Reseed the sampler to the seed used for the original path
+            // This needs to be done because setting the sample index just goes over all samples
             m_rplSampler->reSeed(seed.seed);
 
             m_emitterSampler->reset();
@@ -135,6 +137,7 @@ public:
 
             // Setting the sensor samples manual
             // This is needed because the MC samples where used within a pixel, here they are used over the whole image.
+            // See the difference in pathSampler.sampleSplats() between having an offset en and not having one Point2i(-1)
             ((MyPSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(0, seed.position.x);
             ((MyPSSMLTSampler*) (m_pathSampler->getSensorSampler()))->setPrimarySample(1, seed.position.y);
 
@@ -164,12 +167,12 @@ public:
                 return;
             }
 
-            bool isoutlier = m_outlierDetector->calculateWeight(current->getPosition(0), current->luminance) > 0;
+            // bool isoutlier = m_outlierDetector->calculateWeight(current->getPosition(0), current->luminance, 1.f) > 0;
 
-            if (! isoutlier) {
-                Log(EWarn, "Not outlier anymore! luminance = %f, but expected luminance = %f", current->luminance, seed.luminance);
-                return;
-            }
+            // if (! isoutlier) {
+            //     Log(EWarn, "Not outlier anymore! luminance = %f, but expected luminance = %f", current->luminance, seed.luminance);
+            //     return;
+            // }
             // assert(isoutlier); //TODO!!!
 
             // Log(EInfo, "seed luminance: %f, seed pdf: %f", seed.luminance, seed.pdf);
@@ -198,12 +201,12 @@ public:
 
                 // TODO: works only for unidirectional
                 // Mlt integrates f(u) * w with w == 0 || w == 1
-                Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance);
+                Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance, random->nextFloat());
 
                 if (w == 0) {
                     ++domainRatio;
                     domainMinThreshRatio.incrementBase(1);
-                    if (m_outlierDetector->minValue > proposed->luminance) {
+                    if (m_outlierDetector->getMin() > proposed->luminance) {
                         ++domainMinThreshRatio;
                     }
                 }
@@ -301,6 +304,7 @@ public:
     }
 
     MTS_DECLARE_CLASS()
+    
 private:
     MYPSSMLTConfiguration m_config;
     ref<Scene> m_scene;
@@ -312,7 +316,7 @@ private:
     ref<MyPSSMLTSampler> m_emitterSampler;
     ref<MyPSSMLTSampler> m_directSampler;
     ref<MyRplSampler> m_rplSampler;
-    const OutlierDetector* m_outlierDetector;
+    SoftDetector const* m_outlierDetector;
 };
 
 /* ==================================================================== */
@@ -321,7 +325,7 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const MYPSSMLTConfiguration &conf,
-    const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector) : m_job(parent), m_queue(queue),
+    const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, SoftDetector const* outlierDetector) : m_job(parent), m_queue(queue),
         m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();

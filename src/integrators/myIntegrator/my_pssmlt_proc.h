@@ -24,7 +24,7 @@
 #include <mitsuba/core/statistics.h>
 #include <mitsuba/core/bitmap.h>
 #include "my_pathSeed.h"
-#include "outlierDetectors/outlierDetector.h"
+#include "outlierDetectors/softDetector.h"
 #include "myPSSMLTconfig.h"
 
 MTS_NAMESPACE_BEGIN
@@ -45,7 +45,7 @@ class PSSMLTProcess : public ParallelProcess {
 public:
     PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
         const MYPSSMLTConfiguration &config, 
-        const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, OutlierDetector const* outlierDetector);
+        const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, SoftDetector const* outlierDetector);
 
     void develop();
 
@@ -74,7 +74,7 @@ private:
     unsigned int m_refreshTimeout;
     ref<Timer> m_timeoutTimer, m_refreshTimer;
     ref<Bitmap> mlt_result;
-    const OutlierDetector* m_outlierDetector;
+    SoftDetector const* m_outlierDetector;
 };
 
 MTS_NAMESPACE_END

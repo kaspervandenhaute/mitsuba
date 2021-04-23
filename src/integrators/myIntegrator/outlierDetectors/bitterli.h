@@ -15,7 +15,7 @@ MTS_NAMESPACE_BEGIN
 class OutlierDetectorBitterly : public OutlierDetector {
 
 public:
-    OutlierDetectorBitterly(int width, int height, int nbBuffers, float alfa, float beta, float maxValue);
+    OutlierDetectorBitterly(int width, int height, int nbBuffers, float alfa, float beta, float maxValue, float agresiveness=1);
 
     void contribute(Point2 const& pos, float value) override;
     float calculateWeight(Point2 const& pos, float value) const override;
@@ -30,6 +30,7 @@ private:
     Bitmap3d<float> buffer, tempBuffer;
     float minThreshold = 3;
     int spp;
+    float agresiveness;
 
 
     float calcualateOccurencies(Point2i const& pos, float value) const;

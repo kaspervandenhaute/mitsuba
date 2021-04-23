@@ -108,14 +108,16 @@ float OutlierDetectorZirr1::calculateWeight(Point2 const& posFloat, float value)
         // allow up to ~<cascadeBase> more energy in one sample to lessen bias in some cases
         // colorReliability *= (0.4f + 0.6f*b) * (1-optimizeForError) + optimizeForError; // needed?
         
-        if (curr != index) {
-            reliability = (reliability + colorReliability) * .5f; 
-            reliability = math::clamp(reliability, 0.f, 1.f);     
-        } else {
-            reliability = std::min(reliability, colorReliability);
-        }
-         
+        // if (curr != index) {
+        //     reliability = (reliability + colorReliability) * .5f; 
+        //     reliability = math::clamp(reliability, 0.f, 1.f);     
+        // } else {
+        //     reliability = std::min(reliability, colorReliability);
+        // }
 
+        reliability = (reliability + colorReliability) * .5f; 
+        reliability = math::clamp(reliability, 0.f, 1.f); 
+         
         result += reliability * buffer.get(pos.x, pos.y, curr);
     }
 

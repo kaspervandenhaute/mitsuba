@@ -3,6 +3,7 @@
 #include <mitsuba/render/integrator.h>
 #include <mitsuba/core/bitmap.h>
 #include "utils/writeBitmap.h"
+#include "utils/runningStats.h"
 
 #include <mitsuba/core/statistics.h>
 
@@ -10,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <numeric>
 
 #include "my_pathSeed.h"
 #include "xxHash/xxhash.h"
@@ -57,41 +59,6 @@ private:
     T avg;
     size_t count;
 };
-
-// template<typename T>
-// class RunningAverage {
-
-// public: 
-//     RunningAverage(int nValues) : avg(0), count(0), n(nValues), current(0) {
-//         numbers = new T[](nValues);
-//     }
-
-//     inline T get() const {
-//         int total = 0;
-//         for (int i=0; i<n; ++i) {
-//             total += numbers[i];
-//         }
-//         return total / n;
-//     }
-
-//     inline void put(T val) {
-
-//     }
-
-//     inline void put(T val, int n) {
-
-//     }
-
-//     void reset() {
-
-//     }
-
-// private:
-//     T avg;
-//     size_t count;
-//     int n;
-//     T* numbers;
-// };
 
 
 class MyPathTracer : public Integrator {
@@ -155,15 +122,20 @@ private:
     }
 
     inline size_t computeMltBudget() const {
-    Float r = weightedAvg.get() / unweightedAvg.get();
-    // When all samples are outliers r will be close to 1
-    if (r >= 0.99 && r <= 1) {
-        return samplesTotal;
-    } else if (r > 1) {
-        assert(r <= 1);
+        Float r = weightedStats.Mean() / unweightedStats.Mean();
+        // When all samples are outliers r will be close to 1
+        if (r >= 0.99 && r <= 1) {
+            return samplesTotal;
+        } else if (r > 1) {
+            assert(r <= 1);
+        }
+
+        Float v = weightedStats.StandardDeviation() / pathStats.StandardDeviation();
+        Float s = r / (1-r);
+
+        Log(EInfo, "Variance in: %f, Variance out: %f, original: %f, variance: %f", pathStats.StandardDeviation(), weightedStats.StandardDeviation(), s, v);
+        return samplesTotal * s;
     }
-    return samplesTotal * r / (1-r);
-}
 
     inline uint64_t createSeed(Point2i const& pos) const {
         int buffer[3] = {pos.x, pos.y, iteration};
@@ -221,6 +193,7 @@ private:
         outliersResult->clear();
         seedsResult->clear();
     }
+
 
     void updateOutlierSeedsStats(std::vector<PositionedPathSeed> const& outliers, std::vector<PositionedPathSeed> const& seeds, StatsCounter& outlierCounter, StatsCounter& seedsCounter) {
         // Write all outliers and seeds for later analysis
@@ -286,7 +259,7 @@ private:
     Vector2 invSize;
     SoftDetector* detector;
     int iteration, iterations;
-    Average<Float> unweightedAvg, weightedAvg;
+    RunningStats unweightedStats, weightedStats, pathStats;
     ref<Mutex> seedMutex;
     ref<ImageBlock> pathResult;
     ref<Bitmap> mltResult;

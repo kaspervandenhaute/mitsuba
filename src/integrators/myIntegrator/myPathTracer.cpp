@@ -4,7 +4,7 @@
 #include <string>
 #include <typeinfo>
 #include <stdio.h>
-#include <numeric>
+
 
 #include <mitsuba/core/plugin.h>
 #include <mitsuba/bidir/pathsampler.h>
@@ -140,7 +140,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     int mltSamplerResID, rplSamplerResID;
     initialiseSamplers(mltSamplerResID, rplSamplerResID);
 
-    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300));
+    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
     // auto tempDetector = new ThresholdDetector();
     // auto tempDetector = new TestOutlierDetector();
@@ -180,11 +180,9 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
             // Multiple seeds per work unit
             assert(seeds.size() >= (size_t) m_config.workUnits);
-
-            Float avgLuminance = std::accumulate(seeds.begin(), seeds.end(), 0, [] (Float accum, PositionedPathSeed const& seed1) 
-                                                            {return accum + seed1.luminance;} ) / seeds.size();
         
-            Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f.", iteration, nbOfChains, pathSeeds.size(), avgLuminance);
+            Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f, Var: %f.", 
+                        iteration, nbOfChains, pathSeeds.size(), weightedStats.Mean(), weightedStats.Variance());
 
 
             ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
@@ -212,8 +210,9 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         writeStatisticsToFile(pathSeeds.size(), nbOfChains, mltStats);
 
         // reset r
-        weightedAvg.reset();        
-        unweightedAvg.reset();        
+        weightedStats.Clear();        
+        unweightedStats.Clear();    
+        pathStats.Clear();    
 
         // update the detector for the next iteration.
         detector->update(pathSeeds, nbOfChains, samplesPerPixel);
@@ -263,10 +262,11 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
     block->clear();
 
-    SplatList splatList;
+    RunningStats weightedStatsLocal;
+    RunningStats unweightedStatsLocal;
+    RunningStats pathStatsLocal;
 
-    float weighted = 0;
-    float unweighted = 0;
+    SplatList splatList;
 
     auto invSpp = 1.f/samplesPerPixel;
 
@@ -299,11 +299,12 @@ void MyPathTracer::renderBlock(const Scene *scene,
             if (iteration != 0 && !(j >= samplesPerPixel)) {
             
                 auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
-        
-                weighted += weight*luminance;
-                unweighted += luminance;
 
-                block->put(position, spec * (1-weight) * invSpp, 1); 
+                block->put(position, spec * (1-weight) * invSpp, 1);
+
+                weightedStatsLocal.Push(weight * luminance);
+                unweightedStatsLocal.Push(luminance);
+                pathStatsLocal.Push((1-weight) * luminance);
 
                 if (weight > 0) {
                     localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
@@ -326,10 +327,9 @@ void MyPathTracer::renderBlock(const Scene *scene,
     LockGuard lock(seedMutex); // pathSeeds and pathResult are shared by all threads
     pathResult->put(block);
 
-    auto count = points.size() * samplesPerPixel;
-
-    weightedAvg.put(weighted, count);
-    unweightedAvg.put(unweighted, count);
+    weightedStats += weightedStatsLocal;
+    unweightedStats += unweightedStatsLocal;
+    pathStats += pathStatsLocal;
 
     if (!localPathSeeds.empty()) {
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
@@ -425,12 +425,15 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
         myfile << "\"nInliersMinValue\": " << inlierMinValue.getValue() << ", ";
         myfile << "\"nSeeds\": " << nSeeds << ", ";
         myfile << "\"cost\": " << cost << ", ";
-        myfile << "\"r\": " << weightedAvg.get() / unweightedAvg.get() << ", ";
+        myfile << "\"r\": " << weightedStats.Mean() / unweightedStats.Mean() << ", ";
         myfile << "\"minValue\": " << detector->getMin() << ", ";
         myfile << "\"nMutations\": " << mltStats.nMutations << ", ";
         myfile << "\"nRejections\": " << mltStats.nRejections << ", ";
         myfile << "\"nRejectionDomain\": " << mltStats.nRejectionDomain << ", ";
-        myfile << "\"nRejectionsMinThresh\": " << mltStats.nRejectionDomainMinValue;
+        myfile << "\"nRejectionsMinThresh\": " << mltStats.nRejectionDomainMinValue << ", ";
+        myfile << "\"varIn\": " << pathStats.Variance() << ", ";
+        myfile << "\"varOut\": " << weightedStats.Variance() << ", ";
+        myfile << "\"varUnweigthed\": " << unweightedStats.Variance();
         
         myfile << "}";
 

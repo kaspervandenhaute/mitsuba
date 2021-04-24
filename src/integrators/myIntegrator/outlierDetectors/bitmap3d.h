@@ -3,6 +3,10 @@
 
 #include <mitsuba/mitsuba.h>
 
+#include "../utils/writeToBinary.h"
+#include "../utils/thesisLocation.h"
+
+
 MTS_NAMESPACE_BEGIN
 
 struct RatioAndIndex {
@@ -12,13 +16,20 @@ struct RatioAndIndex {
 
 template <typename T>
 struct Bitmap3d {
-    T* data;
+    
     size_t width, height, depth;
+    T* data;
 
     Bitmap3d(size_t width, size_t height, size_t depth) : 
         width(width), height(height), depth(depth) {
         assert(width > 0 && height > 0 && depth > 0);
         data = new T[size()]();
+    }
+
+    Bitmap3d(size_t width, size_t height, size_t depth, T* data) : 
+        width(width), height(height), depth(depth), data(data) {
+        assert(width > 0 && height > 0 && depth > 0);
+       
     }
 
     inline T get(size_t x, size_t y, size_t z) const {
@@ -59,7 +70,11 @@ struct Bitmap3d {
     }
 
     ~Bitmap3d() {
-        delete data;
+        delete[] data;
+    }
+
+    void writeToBinary(std::string path) {
+        writeToBinaryFile(data, width*height*depth, path);
     }
 };
 

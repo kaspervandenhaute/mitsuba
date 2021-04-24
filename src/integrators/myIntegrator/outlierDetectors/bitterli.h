@@ -16,6 +16,7 @@ class OutlierDetectorBitterly : public OutlierDetector {
 
 public:
     OutlierDetectorBitterly(int width, int height, int nbBuffers, float alfa, float beta, float maxValue, float agresiveness=1);
+    OutlierDetectorBitterly(int width, int height, int nbBuffers, float* buffer, int spp, float alfa, float beta, float maxValue, float agresiveness=1);
 
     void contribute(Point2 const& pos, float value) override;
     float calculateWeight(Point2 const& pos, float value) const override;

@@ -8,6 +8,13 @@ MTS_NAMESPACE_BEGIN
 OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue, float agresiveness) :
         OutlierDetector(0, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
         buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0), agresiveness(agresiveness) {
+
+}
+
+OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float* buffer, int spp, float alfa, float beta, float maxValue, float agresiveness) :
+        OutlierDetector(0, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
+        buffer(width, height, nbBuffers1, buffer), tempBuffer(width, height, nbBuffers1), spp(spp), agresiveness(agresiveness) {
+            
 }
 
 void OutlierDetectorBitterly::contribute(Point2 const& posFloat, float value) {
@@ -91,16 +98,16 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
 }
 
 void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
-    buffer.add(tempBuffer);
-    tempBuffer.reset();
     // setAdditionalThreshold(seeds, nChains); //TODO
-    spp = newSpp;
+    update(newSpp);
 }
 
 void OutlierDetectorBitterly::update(int newSpp) {
     buffer.add(tempBuffer);
     tempBuffer.reset();
     spp += newSpp;
+
+    // buffer.writeToBinary(THESISLOCATION + "prentjes/test/bufferBitterli.bin");
 }
 
 void OutlierDetectorBitterly::setAdditionalThreshold(std::vector<PositionedPathSeed> const& allSeeds, size_t nChains) {

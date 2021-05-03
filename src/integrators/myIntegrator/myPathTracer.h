@@ -134,7 +134,7 @@ private:
         Float s = r / (1-r);
 
         Log(EInfo, "Variance in: %f, Variance out: %f, original: %f, variance: %f", pathStats.StandardDeviation(), weightedStats.StandardDeviation(), s, v);
-        return samplesTotal * s;
+        return samplesTotal * r;
     }
 
     inline uint64_t createSeed(Point2i const& pos) const {
@@ -144,35 +144,39 @@ private:
 
     void writeAvos(std::string const& path, std::string const& tag= "") {
 
+        int actualIterations = iterations - 1;
+
         auto result = mltResult->clone();
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iterations);
+        result->scale(1.f/actualIterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "total" + tag + ".exr");
 
-        mltResult->scale(1.f/iterations);
+        mltResult->scale(1.f/actualIterations);
         BitmapWriter::writeBitmap(mltResult, BitmapWriter::EHDR, path + "mlt" + tag + ".exr");
 
         result->clear();
         result->accumulate(seedsResult->getBitmap(), Point2i(seedsResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iterations);
+        result->scale(1.f/actualIterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "seeds" + tag + ".exr");
 
         result->clear();
         result->accumulate(outliersResult->getBitmap(), Point2i(outliersResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iterations);
+        result->scale(1.f/actualIterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outliers" + tag + ".exr");
 
-        result->clear();
-        result->accumulate(outlierDomain->getBitmap(), Point2i(outlierDomain->getBorderSize()), Point2i(0.f), result->getSize());
-        result->accumulate(outliersResult->getBitmap(), Point2i(outliersResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iterations);
-        BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outlierDomain" + tag + ".exr");
+        // result->clear();
+        // result->accumulate(outlierDomain->getBitmap(), Point2i(outlierDomain->getBorderSize()), Point2i(0.f), result->getSize());
+        // result->accumulate(outliersResult->getBitmap(), Point2i(outliersResult->getBorderSize()), Point2i(0.f), result->getSize());
+        // result->scale(1.f/actualIterations);
+        // BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "outlierDomain" + tag + ".exr");
 
         result->clear();
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iterations);
+        result->scale(1.f/actualIterations);
         BitmapWriter::writeBitmap(result, BitmapWriter::EHDR, path + "path" + tag + ".exr");
     }
+
+
 
     void writeTotal(std::string const& path) {
         auto result = createResult();
@@ -183,7 +187,7 @@ private:
         ref<Bitmap> result = mltResult->clone();
         result->scale(1.f/samplesPerPixel); //TODO: Why?
         result->accumulate(pathResult->getBitmap(), Point2i(pathResult->getBorderSize()), Point2i(0.f), result->getSize());
-        result->scale(1.f/iteration);
+        result->scale(1.f/(iterations -1));
         return result;
     }
 

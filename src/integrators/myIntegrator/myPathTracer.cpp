@@ -145,18 +145,18 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     float* data = new float [size];
     readBinaryFile(THESISLOCATION + "prentjes/test/bed_bufferBitterli100x100_10000spp.bin", data, size);
 
-    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, 300, outlierDetectorThreshold));
-    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 300, outlierDetectorThreshold));
+    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, 1E6, outlierDetectorThreshold));
+    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
-    // auto tempDetector = new ThresholdDetector();
-    // auto tempDetector = new TestOutlierDetector();
+    // auto tempDetector = std::unique_ptr<ThresholdDetector>(new ThresholdDetector());
+    // auto tempDetector = std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector());
     detector = new SoftDetector(std::move(tempDetector), detectorSoftness);
 
 
     int integratorResID = sched->registerResource(this);
 
     // Initialise the outlier detector
-    // initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
 
     for (iteration=1; iteration<iterations; ++iteration) {
 
@@ -302,7 +302,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
             
             detector->contribute(position, luminance);
 
-            if (iteration != 0 && !(j >= samplesPerPixel)) {
+            if (iteration != 0 && j < samplesPerPixel) {
             
                 auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
 
@@ -313,7 +313,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 pathStatsLocal.Push((1-weight) * luminance);
 
                 if (weight > 0) {
-                    localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
+                    // localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
                 } else {
                     inlierMinValue.incrementBase();
                     if (detector->getMin() <= luminance) {
@@ -394,7 +394,13 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
             
             // Override the property we want to test
             props.removeProperty(testProperty);
-            props.setFloat(testProperty, testValue);
+
+            if (testProperty == "iterations") {
+                props.setInteger(testProperty, (int) testValue);
+            } else {
+                props.setFloat(testProperty, testValue);
+            }
+
 
             
 

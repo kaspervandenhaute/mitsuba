@@ -29,7 +29,7 @@ private:
     const int nbBuffers;
     const float alfaInv, beta;
     Bitmap3d<float> buffer, tempBuffer;
-    float minThreshold = 3;
+    float minThreshold = 0;
     int spp;
     float agresiveness;
 

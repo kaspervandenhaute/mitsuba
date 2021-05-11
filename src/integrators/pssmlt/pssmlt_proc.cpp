@@ -159,7 +159,38 @@ public:
             m_directSampler->setLargeStep(largeStep);
 
             m_pathSampler->sampleSplats(Point2i(-1), *proposed);
+
+            
+            // // multiply f(u) with w
+            // float luminance = 0.f;
+            // assert(m_config.technique == PathSampler::EBidirectional ? true : proposed->splats.size() == 1);
+            // for (std::pair<Point2, Spectrum>& splat : proposed->splats) {
+                
+            //     // Mlt integrates f(u) * w with w == 0 || w == 1
+            //     float w = m_outlierDetector->calculateWeight(splat.first, splat.second.getLuminance(), random->nextFloat());
+
+            //     // Stats
+            //     if (w == 0) {
+            //         ++domainRatio;
+            //         domainMinThreshRatio.incrementBase(1);
+            //         if (m_outlierDetector->getMin() > proposed->luminance) {
+            //             ++domainMinThreshRatio;
+            //         }
+            //     }
+            //     // Scale the value of the splat with w.
+            //     splat.second *= w;
+            //     luminance += splat.second.getLuminance(); 
+
+            //     // works because exactely zero
+            //     assert(w == 0.f ? splat.second.getLuminance() == 0.f : true);
+            //     //std::cout << "w: " << w << "  original: " << proposed->luminance << "  new : " << luminance << "  luminance: " << splat.second.getLuminance() << "  splat: " << splat.second.toString() << "\n";
+                
+            // }
+            // proposed->luminance = luminance;
+
+
             proposed->normalize(m_config.importanceMap);
+            
 
             Float a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
 

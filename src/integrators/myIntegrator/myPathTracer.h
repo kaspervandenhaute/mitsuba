@@ -134,7 +134,7 @@ private:
         Float s = r / (1-r);
 
         Log(EInfo, "Variance in: %f, Variance out: %f, original: %f, variance: %f", pathStats.StandardDeviation(), weightedStats.StandardDeviation(), s, v);
-        return samplesTotal * r;
+        return samplesTotal * s;
     }
 
     inline uint64_t createSeed(Point2i const& pos) const {

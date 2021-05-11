@@ -161,7 +161,7 @@ public:
             /* Sanity check -- the luminance should match the one from
             the warmup phase - an error here would indicate inconsistencies
             regarding the use of random numbers during sample generation */
-            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.1) {
+            if (std::abs((current->luminance - seed.luminance) / seed.luminance) > 0.5) {
                 Log(EWarn, "Error when reconstructing a seed path (%i): luminance "
                     "= %f, but expected luminance = %f", seed.seed, current->luminance, seed.luminance);
                 return;
@@ -196,26 +196,50 @@ public:
                     break;
 
                 m_pathSampler->sampleSplats(Point2i(-1), *proposed);
-                // This does the normalisation of dividing by the luminance
-                proposed->normalize(nullptr);
+            
 
-                // TODO: works only for unidirectional
-                // Mlt integrates f(u) * w with w == 0 || w == 1
-                Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance, random->nextFloat());
-
-                if (w == 0) {
-                    ++domainRatio;
-                    domainMinThreshRatio.incrementBase(1);
-                    if (m_outlierDetector->getMin() > proposed->luminance) {
-                        ++domainMinThreshRatio;
-                    }
-                }
-
+                
                 // multiply f(u) with w
-                for (auto& splat : proposed->splats) {
+                float luminance = 0.f;
+                assert(m_config.technique == PathSampler::EBidirectional ? true : proposed->splats.size() == 1);
+                for (std::pair<Point2, Spectrum>& splat : proposed->splats) {
+                    
+                    // Mlt integrates f(u) * w with w == 0 || w == 1
+                    float w = m_outlierDetector->calculateWeight(splat.first, splat.second.getLuminance(), random->nextFloat());
+
+                    // Stats
+                    if (w == 0) {
+                        ++domainRatio;
+                        domainMinThreshRatio.incrementBase(1);
+                        if (m_outlierDetector->getMin() > proposed->luminance) {
+                            ++domainMinThreshRatio;
+                        }
+                    }
+                    // Scale the value of the splat with w.
                     splat.second *= w;
+                    luminance += splat.second.getLuminance(); 
+
+                    // works because exactely zero
+                    assert(w == 0.f ? splat.second.getLuminance() == 0.f : true);
+                    //std::cout << "w: " << w << "  original: " << proposed->luminance << "  new : " << luminance << "  luminance: " << splat.second.getLuminance() << "  splat: " << splat.second.toString() << "\n";
+                    
                 }
-                proposed->luminance *= w;
+                proposed->luminance = luminance;
+
+
+                // This does the normalisation of dividing by the luminance
+                // !!! After the use of the outlier detector, otherwise the outlier detector will compare with normalised values which are small !!!
+                proposed->normalize(nullptr);
+                
+
+                // Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance, random->nextFloat());
+                
+                // // multiply f(u) with w
+                // assert(proposed->splats.size() == 1);
+                // for (auto& splat : proposed->splats) {
+                //     splat.second *= w;
+                // }
+                // proposed->luminance *= w;
 
                 Float a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
 

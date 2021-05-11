@@ -69,6 +69,13 @@ void MyPathTracer::renderSetup(Scene *scene,
     outliersResult = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
     outlierDomain = new ImageBlock(Bitmap::ESpectrum, cropSize, film->getReconstructionFilter());
 
+    mltResult->clear();
+    pathResult->clear();
+    seedsResult->clear();
+    outliersResult->clear();
+    outlierDomain->clear();
+
+
     if (sensor->needsApertureSample())
         Log(EError, "No support for aperture samples at this time!");
     if (sensor->needsTimeSample())
@@ -145,8 +152,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     float* data = new float [size];
     readBinaryFile(THESISLOCATION + "prentjes/test/bed_bufferBitterli100x100_10000spp.bin", data, size);
 
-    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, 1E6, outlierDetectorThreshold));
-    auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold));
+    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, std::numeric_limits<float>::infinity(), outlierDetectorThreshold));
+    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<ThresholdDetector>(new ThresholdDetector());
     // auto tempDetector = std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector());
@@ -187,8 +194,8 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             // Multiple seeds per work unit
             assert(seeds.size() >= (size_t) m_config.workUnits);
         
-            Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f, Var: %f.", 
-                        iteration, nbOfChains, pathSeeds.size(), weightedStats.Mean(), weightedStats.Variance());
+            Log(EInfo, "Starting on mlt in iteration %i with %i seeds out of %i candidates. Avg luminance is %f, Std: %f.", 
+                        iteration, nbOfChains, pathSeeds.size(), weightedStats.Mean(), std::sqrt(weightedStats.Variance()));
 
 
             ref<PSSMLTProcess> process = new PSSMLTProcess(job, queue, m_config, seeds, mltResult, detector);
@@ -313,7 +320,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 pathStatsLocal.Push((1-weight) * luminance);
 
                 if (weight > 0) {
-                    // localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
+                    localPathSeeds.emplace_back(Point2((double) position.x / cropSize.x, (double) position.y / cropSize.y), seed, index, luminance, spec);
                 } else {
                     inlierMinValue.incrementBase();
                     if (detector->getMin() <= luminance) {

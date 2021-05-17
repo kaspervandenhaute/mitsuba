@@ -19,8 +19,11 @@ OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBu
 
 void OutlierDetectorBitterly::contribute(Point2 const& posFloat, float value) {
     auto pos = discretePosition(posFloat);
-    if (!(pos.y < height && pos.x < width)) {
-        std::cout << posFloat.toString() << std::endl;
+    if (pos.y == height) {
+        pos.y -= 1;
+    }
+    if (pos.x == width) {
+        pos.x -= 1;
     }
     assert(pos.y < height && pos.x < width);
 
@@ -52,6 +55,12 @@ float OutlierDetectorBitterly::calcualateOccurencies(Point2i const& pos, float v
 
 float OutlierDetectorBitterly::calculateWeight(Point2 const& posFloat, float value) const {
     auto pos = discretePosition(posFloat);
+    if (pos.y == height) {
+        pos.y -= 1;
+    }
+    if (pos.x == width) {
+        pos.x -= 1;
+    }
     assert(pos.y < height && pos.x < width);
 
     if (value > maxValue) {
@@ -98,7 +107,7 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
 }
 
 void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
-    setAdditionalThreshold(seeds, nChains); //TODO
+    // setAdditionalThreshold(seeds, nChains); //TODO
     update(newSpp);
 }
 

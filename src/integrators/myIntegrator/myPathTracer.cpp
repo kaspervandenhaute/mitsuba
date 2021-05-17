@@ -20,6 +20,7 @@
 #include "outlierDetectors/zirr1.h"
 #include "outlierDetectors/testDetector.h"
 #include "outlierDetectors/thresholdDetector.h"
+#include "outlierDetectors/meanDetector.h"
 
 #include "utils/thesisLocation.h"
 
@@ -148,15 +149,16 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     int mltSamplerResID, rplSamplerResID;
     initialiseSamplers(mltSamplerResID, rplSamplerResID);
 
-    size_t size = cropSize.x * cropSize.y * 8;
-    float* data = new float [size];
-    readBinaryFile(THESISLOCATION + "prentjes/test/bed_bufferBitterli100x100_10000spp.bin", data, size);
+    // size_t size = cropSize.x * cropSize.y * 8;
+    // float* data = new float [size];
+    // readBinaryFile(THESISLOCATION + "prentjes/test/bed_bufferBitterli100x100_10000spp.bin", data, size);
 
     // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, std::numeric_limits<float>::infinity(), outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<ThresholdDetector>(new ThresholdDetector());
     // auto tempDetector = std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector());
+    auto tempDetector = std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, 1.5f));
     detector = new SoftDetector(std::move(tempDetector), detectorSoftness);
 
 
@@ -236,7 +238,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
         }
     }
 
-    if (intermediatePeriod != 0) {
+    if (intermediatePeriod < 0) {
         writeTotal( intermediatePath + std::to_string(cost/1000) + ".exr");
     } else {
         auto result = createResult();
@@ -432,7 +434,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
     std::ofstream myfile (THESISLOCATION + "prentjes/test/stat_output.txt", std::ios::app);
     if (myfile.is_open())
     {
-        if (iteration == 0) {
+        if (iteration == 1) {
             myfile << "[\n";
         }
 

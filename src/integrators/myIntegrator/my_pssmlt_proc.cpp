@@ -48,7 +48,7 @@ StatsCounter forcedAcceptance("Primary sample space MLT",
 
 class PSSMLTRenderer : public WorkProcessor {
 public:
-    PSSMLTRenderer(const MYPSSMLTConfiguration &conf, SoftDetector const* outlierDetector)
+    PSSMLTRenderer(const MYPSSMLTConfiguration &conf, SoftDetector* outlierDetector)
         : m_config(conf), m_outlierDetector(outlierDetector) {
     }
 
@@ -278,6 +278,7 @@ public:
                         value *= correction * cumulativeWeight;
                         if (!value.isZero()) {
                             result->put(current->getPosition(k), &value[0]);
+                            // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                         }
                     }
 
@@ -297,6 +298,7 @@ public:
                         value *= proposedWeight * correction;
                         if (!value.isZero()) {
                             result->put(proposed->getPosition(k), &value[0]);
+                            // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                         }
                     }
 
@@ -313,6 +315,7 @@ public:
                 value *= correction * cumulativeWeight;
                 if (!value.isZero()) {
                     result->put(current->getPosition(k), &value[0]);
+                    // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                 }
             }
             current->clear();
@@ -340,7 +343,7 @@ private:
     ref<MyPSSMLTSampler> m_emitterSampler;
     ref<MyPSSMLTSampler> m_directSampler;
     ref<MyRplSampler> m_rplSampler;
-    SoftDetector const* m_outlierDetector;
+    SoftDetector* m_outlierDetector;
 };
 
 /* ==================================================================== */
@@ -349,7 +352,7 @@ private:
 
 PSSMLTProcess::PSSMLTProcess(const RenderJob *parent, RenderQueue *queue,
     const MYPSSMLTConfiguration &conf,
-    const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, SoftDetector const* outlierDetector) : m_job(parent), m_queue(queue),
+    const std::vector<PositionedPathSeed> &seeds, Bitmap* mltResult, SoftDetector* outlierDetector) : m_job(parent), m_queue(queue),
         m_config(conf), m_progress(NULL), m_seeds(seeds), mlt_result(mltResult), m_outlierDetector(outlierDetector) {
     m_timeoutTimer = new Timer();
     m_refreshTimer = new Timer();

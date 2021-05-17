@@ -21,6 +21,10 @@ public:
         detector->contribute(pos, value);
     }
 
+    inline void contributeMlt(Point2 const& pos, float value) {
+        detector->contributeMlt(pos, value);
+    }
+
     inline float calculateWeight(Point2 const& pos, float value, float rand) const {
         auto weight = detector->calculateWeight(pos, value);
 

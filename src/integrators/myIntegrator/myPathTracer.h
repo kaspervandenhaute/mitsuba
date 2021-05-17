@@ -243,6 +243,8 @@ private:
     void initDetector(Scene *scene, RenderQueue *queue, const RenderJob *job, 
     int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID);
 
+    void initDetectorMean(const Scene *scene, Sampler *_sampler);
+
     void writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const;
 
     void init();

@@ -23,6 +23,7 @@ public:
     virtual float calculateWeight(Point2 const& pos, float value) const =0;
     virtual void update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) =0;
     virtual void update(int newSpp) =0;
+    virtual void init(Point2i const& pos, const float val) {}
 
     inline Point2i discretePosition(Point2 const& pos) const {
         // return Point2i(pos.x - 0.5f, pos.y - 0.5f);

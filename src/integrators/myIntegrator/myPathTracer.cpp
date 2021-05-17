@@ -122,17 +122,6 @@ void MyPathTracer::initDetector(Scene *scene, RenderQueue *queue, const RenderJo
     int sceneResID, int sensorResID, int samplerResID, int rplSamplerResID, int integratorResID) {
 
     iteration = 0;
-    
-    // int spp = samplesPerPixel;
-    // samplesPerPixel = 1;
-
-    // for (int i=0; i<spp; ++i) {
-    //     pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID); 
-    //     detector->update(pathSeeds, computeMltBudget()/m_config.nMutations, i);
-    //     pathSeeds.clear();
-    // }
-    // weightedAvg.reset();
-    // unweightedAvg.reset();
 
     pathTracing(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
     detector->update(samplesPerPixel);
@@ -158,14 +147,15 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<ThresholdDetector>(new ThresholdDetector());
     // auto tempDetector = std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector());
-    auto tempDetector = std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, 1.5f));
+    auto tempDetector = std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, 2.f));
     detector = new SoftDetector(std::move(tempDetector), detectorSoftness);
 
 
     int integratorResID = sched->registerResource(this);
 
     // Initialise the outlier detector
-    initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    // initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    initDetectorMean(scene, sampler);
 
     for (iteration=1; iteration<iterations; ++iteration) {
 
@@ -313,7 +303,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
 
             if (iteration != 0 && j < samplesPerPixel) {
             
-                auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
+                auto weight = detector->calculateWeight(position, luminance, random->nextFloat());
 
                 block->put(position, spec * (1-weight) * invSpp, 1);
 
@@ -331,7 +321,7 @@ void MyPathTracer::renderBlock(const Scene *scene,
                 }              
             }
             else if (iteration != 0 && j >= samplesPerPixel) {
-                auto weight = detector->calculateWeight(position, luminance, random->nextFloat()); // TODO not thread save
+                auto weight = detector->calculateWeight(position, luminance, random->nextFloat());
                 outlierDomain->put(position, spec * weight * invSpp, 1);
             }
             
@@ -349,6 +339,62 @@ void MyPathTracer::renderBlock(const Scene *scene,
     if (!localPathSeeds.empty()) {
         pathSeeds.insert( pathSeeds.end(), localPathSeeds.begin(), localPathSeeds.end() );
     }
+}
+
+// TODO: this is still single threaded
+void MyPathTracer::initDetectorMean(const Scene *scene, Sampler *_sampler) {
+
+    iteration = 0;
+
+    auto* sampler = (MyRplSampler*) _sampler;
+    
+    ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
+            sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
+            false, false, false);
+
+    std::vector<float> samples;
+    samples.reserve(4);
+
+    SplatList splatList;
+
+    for (int y = 0; y<cropSize.y; ++y) {
+        for (int x = 0; x<cropSize.x; ++x) {
+            Point2i offset(x,y);
+
+            // hash function is only needed for repeatability
+            // auto seed = createSeed(offset);
+            // auto seed = random->nextULong();
+            // sampler->reSeed(seed);
+            // sampler->generate(offset);
+
+            for (size_t j = 0; j<samplesPerPixel; j++) {
+                
+                splatList.clear();
+                pathSampler->sampleSplats(offset, splatList);
+
+                if (splatList.luminance != 0.f) {
+                    samples.push_back(splatList.luminance);    
+                }
+                if (samples.size() >= 4) {
+                    break;
+                }
+            }
+            
+            if (samples.size() > 0) {
+                std::sort(samples.begin(), samples.end());
+                float init_value = samples[samples.size()*0.4f];
+                detector->init(offset, init_value);
+                samples.clear();
+            } else {
+                detector->init(offset, 0.01f);
+            }
+        }
+    }
+    detector->update(0);
+    pathSeeds.clear();
+
+    // Set the spp back to the requested value after initialisation
+    samplesPerPixel = sampler->getSampleCount();
 }
 
 void MyPathTracer::init() {

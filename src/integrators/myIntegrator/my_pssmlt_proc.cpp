@@ -232,15 +232,6 @@ public:
                 proposed->normalize(nullptr);
                 
 
-                // Float w = m_outlierDetector->calculateWeight(proposed->getPosition(0), proposed->luminance, random->nextFloat());
-                
-                // // multiply f(u) with w
-                // assert(proposed->splats.size() == 1);
-                // for (auto& splat : proposed->splats) {
-                //     splat.second *= w;
-                // }
-                // proposed->luminance *= w;
-
                 Float a = std::min((Float) 1.0f, proposed->luminance / current->luminance);
 
                 if (std::isnan(proposed->luminance) || proposed->luminance < 0) {
@@ -254,8 +245,6 @@ public:
 
 
                 if (a > 0) {  
-                    //TODO: look into kelemen style weights
-
                     currentWeight = 1-a;
                     proposedWeight = a;
                     
@@ -278,8 +267,8 @@ public:
                         value *= correction * cumulativeWeight;
                         if (!value.isZero()) {
                             result->put(current->getPosition(k), &value[0]);
-                            // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                         }
+                        m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                     }
 
                     cumulativeWeight = proposedWeight;
@@ -298,8 +287,8 @@ public:
                         value *= proposedWeight * correction;
                         if (!value.isZero()) {
                             result->put(proposed->getPosition(k), &value[0]);
-                            // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                         }
+                        m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                     }
 
                     m_sensorSampler->reject();
@@ -315,8 +304,8 @@ public:
                 value *= correction * cumulativeWeight;
                 if (!value.isZero()) {
                     result->put(current->getPosition(k), &value[0]);
-                    // m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
                 }
+                m_outlierDetector->contributeMlt(current->getPosition(k), value.getLuminance());
             }
             current->clear();
             proposed->clear();
@@ -391,6 +380,7 @@ void PSSMLTProcess::develop() {
     m_refreshTimer->reset();
     m_queue->signalRefresh(m_job);
 }
+
 
 void PSSMLTProcess::processResult(const WorkResult *wr, bool cancelled) {
     LockGuard lock(m_resultMutex);

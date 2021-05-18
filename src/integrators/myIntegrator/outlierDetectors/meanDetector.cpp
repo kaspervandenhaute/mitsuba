@@ -1,6 +1,9 @@
 
 #include "meanDetector.h"
 
+#include "../utils/writeBitmap.h"
+#include "../utils/thesisLocation.h"
+
 MTS_NAMESPACE_BEGIN
 
 void MeanOutlierDetector::contribute(Point2 const& posFloat, float value) {
@@ -60,7 +63,7 @@ void MeanOutlierDetector::update(std::vector<PositionedPathSeed> const& seeds, s
 void MeanOutlierDetector::update(int newSpp) {
 
     float inv_spp = 1.f / newSpp;
-    float inv_mlt_samples = 1.f / mlt_samples; //TODO: doesn't work with mlt_samples == 0
+    float inv_mlt_samples = 1.f / (mlt_samples*newSpp); //TODO: doesn't work with mlt_samples == 0
     auto combine_path_mlt = [inv_spp, inv_mlt_samples](const float a, const float b) {
         return (a*inv_spp + b*inv_mlt_samples);
     };
@@ -79,6 +82,9 @@ void MeanOutlierDetector::update(int newSpp) {
         std::fill(mlt_sums_temp.begin(), mlt_sums_temp.end(), 0.f);
         mlt_samples = 0;
     }
+
+    auto bitmap = new Bitmap(Bitmap::ELuminance, Bitmap::EFloat32, Vector2i(width, height), 1, reinterpret_cast<uint8_t*>(current_mean.data()));
+    BitmapWriter::writeBitmap(bitmap, BitmapWriter::EHDR, THESISLOCATION + "prentjes/test/mean/" + std::to_string(iteration) + ".exr");
 
     current_spp += newSpp;
     ++iteration;

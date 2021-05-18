@@ -70,8 +70,6 @@ private:
     float threshold;
     uint32_t current_spp;
     std::atomic<uint32_t> mlt_samples;
-    int last_index = -1;
-    std::vector<float> init_samples;
     int iteration = 0;
 };
 

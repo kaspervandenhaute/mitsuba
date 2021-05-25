@@ -16,7 +16,7 @@ float TestOutlierDetector::calculateWeight(Point2 const& posFloat, float value) 
     // return value > 2.f ? 1.f : 0.f;
 
     // return pos.x == 0 && pos.y == 0  ? 1.f : 0.f;
-    return 0.f;
+    return value;
 
 }
 

@@ -41,17 +41,7 @@ float MeanOutlierDetector::calculateWeight(Point2 const& posFloat, float value) 
 
 
 float MeanOutlierDetector::calculateWeightDiscrete(Point2i const& pos, const float value) const {
-
-    float mean = neighbors_mean(pos);
-
-    auto avg_with_new = (mean * total_spp + value) / (total_spp + 1);
-
-    // std::cout << "current: " << current_avg << "  new: " << avg_with_new << '\n';
-
-    if (avg_with_new > mean * threshold) {
-        return 1.f;
-    }
-    return 0.f;
+    return value > thresholds[get_index(pos)];
 }
 
 
@@ -63,8 +53,9 @@ void MeanOutlierDetector::update(std::vector<PositionedPathSeed> const& seeds, s
 void MeanOutlierDetector::update(int newSpp) {
 
     float inv_spp = 1.f / newSpp;
-    float inv_mlt_samples = 1.f / (mlt_samples*newSpp); //TODO: doesn't work with mlt_samples == 0
+    float inv_mlt_samples = mlt_samples != 0 ? 1.f / (mlt_samples*newSpp) : 0.f;
     auto combine_path_mlt = [inv_spp, inv_mlt_samples](const float a, const float b) {
+        // Add the inlier domain and outlier domain
         return (a*inv_spp + b*inv_mlt_samples);
     };
 
@@ -74,17 +65,28 @@ void MeanOutlierDetector::update(int newSpp) {
         std::transform(sums_temp.begin(), sums_temp.end(), mlt_sums_temp.begin(), sums_temp.begin(), combine_path_mlt);
         std::transform(sums_temp.begin(), sums_temp.end(), current_mean.begin(), current_mean.begin(), 
             [this, inv_next_iteration](const float a, const float b){
+                // new mean from previous iterations and last
                 return (a + b*iteration) * inv_next_iteration;
             });
         
-
+        // Reset for next iteration
         std::fill(sums_temp.begin(), sums_temp.end(), 0.f);
         std::fill(mlt_sums_temp.begin(), mlt_sums_temp.end(), 0.f);
         mlt_samples = 0;
     }
 
-    auto bitmap = new Bitmap(Bitmap::ELuminance, Bitmap::EFloat32, Vector2i(width, height), 1, reinterpret_cast<uint8_t*>(current_mean.data()));
-    BitmapWriter::writeBitmap(bitmap, BitmapWriter::EHDR, THESISLOCATION + "prentjes/test/mean/" + std::to_string(iteration) + ".exr");
+    // Set thresholds for every pixel
+    for (int y=0; y<height; ++y) {
+        for (int x=0; x<width; ++x) {
+            Point2i pos{x,y};
+            auto index = get_index(x,y);
+            thresholds[index] = neighbors_mean(pos) * (threshold*total_spp + threshold - total_spp);
+        }
+    }
+
+    // Write current average to picture for debug
+    // auto bitmap = new Bitmap(Bitmap::ELuminance, Bitmap::EFloat32, Vector2i(width, height), 1, reinterpret_cast<uint8_t*>(current_mean.data()));
+    // BitmapWriter::writeBitmap(bitmap, BitmapWriter::EHDR, THESISLOCATION + "prentjes/test/mean/" + std::to_string(iteration) + ".exr");
 
     current_spp += newSpp;
     ++iteration;

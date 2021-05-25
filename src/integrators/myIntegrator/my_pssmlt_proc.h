@@ -34,6 +34,10 @@ struct MltStats {
     uint64_t nRejections;
     uint64_t nRejectionDomain;
     uint64_t nRejectionDomainMinValue;
+
+    MltStats() : nMutations(0), nRejections(0), nRejectionDomain(0), nRejectionDomainMinValue(0) {}
+    MltStats(uint64_t nMutations, uint64_t nRejections, uint64_t nRejectionDomain, uint64_t nRejectionDomainMinValue) : 
+        nMutations(nMutations), nRejections(nRejections), nRejectionDomain(nRejectionDomain), nRejectionDomainMinValue(nRejectionDomainMinValue) {}
 };
 
 

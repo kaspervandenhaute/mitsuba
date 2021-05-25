@@ -20,6 +20,7 @@ public:
         current_mean(width*height, 0.f), 
         mlt_sums_temp(width*height, 0.f), 
         sums_temp(width*height, 0.f), 
+        thresholds(width*height, 0.f),
         total_spp{total_spp},
         threshold(threshold), current_spp(0), mlt_samples(0) {}
 
@@ -66,6 +67,7 @@ private:
     int height, width;
     std::vector<float> current_mean;
     std::vector<float> mlt_sums_temp, sums_temp;
+    std::vector<float> thresholds;
     int total_spp;
     float threshold;
     uint32_t current_spp;

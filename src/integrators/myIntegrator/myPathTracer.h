@@ -245,7 +245,7 @@ private:
 
     void initDetectorMean(const Scene *scene, Sampler *_sampler);
 
-    void writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const;
+    void writeStatisticsToFile(int nOutliers, int nSeeds, MltStats const& mltStats) const;
 
     void init();
 
@@ -262,6 +262,7 @@ private:
     MYPSSMLTConfiguration m_config;
     std::vector<PositionedPathSeed> pathSeeds;
     size_t samplesPerPixel, samplesTotal;
+    bool additionalThresholding;
     Vector2 invSize;
     SoftDetector* detector;
     int iteration, iterations;
@@ -277,6 +278,7 @@ private:
     std::string intermediatePath;
     ref<Random> random;
     uint64_t cost = 0;
+    std::string detectorType;
 
     ref<Scheduler> sched;
     ref<Sensor> sensor;
@@ -286,6 +288,7 @@ private:
     Vector2i cropSize;
     int kappa;
     float detectorSoftness;
+    bool use_mlt;
 
     Properties props;
     int nPoints, nSubPoints;

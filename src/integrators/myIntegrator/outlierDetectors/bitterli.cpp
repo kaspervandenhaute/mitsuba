@@ -5,15 +5,15 @@
 
 MTS_NAMESPACE_BEGIN
 
-OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue, float agresiveness) :
+OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float alfa, float beta, float maxValue, float agresiveness, bool additionalThresholding) :
         OutlierDetector(0, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
-        buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0), agresiveness(agresiveness) {
+        buffer(width, height, nbBuffers1), tempBuffer(width, height, nbBuffers1), spp(0), agresiveness(agresiveness), additionalThresholding(additionalThresholding) {
 
 }
 
-OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float* buffer, int spp, float alfa, float beta, float maxValue, float agresiveness) :
+OutlierDetectorBitterly::OutlierDetectorBitterly(int width, int height, int nbBuffers1, float* buffer, int spp, float alfa, float beta, float maxValue, float agresiveness, bool additionalThresholding) :
         OutlierDetector(0, maxValue), width(width), height(height), nbBuffers(nbBuffers1), alfaInv(1/alfa), beta(beta),
-        buffer(width, height, nbBuffers1, buffer), tempBuffer(width, height, nbBuffers1), spp(spp), agresiveness(agresiveness) {
+        buffer(width, height, nbBuffers1, buffer), tempBuffer(width, height, nbBuffers1), spp(spp), agresiveness(agresiveness), additionalThresholding(additionalThresholding) {
             
 }
 
@@ -107,7 +107,9 @@ float OutlierDetectorBitterly::calculateThreshold(Point2i const& pos) const {
 }
 
 void OutlierDetectorBitterly::update(std::vector<PositionedPathSeed> const& seeds, size_t nChains, int newSpp) {
-    // setAdditionalThreshold(seeds, nChains); //TODO
+    if (additionalThresholding) {
+        setAdditionalThreshold(seeds, nChains); //TODO
+    }
     update(newSpp);
 }
 

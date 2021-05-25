@@ -138,24 +138,39 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
     int mltSamplerResID, rplSamplerResID;
     initialiseSamplers(mltSamplerResID, rplSamplerResID);
 
+    int integratorResID = sched->registerResource(this);
+
     // size_t size = cropSize.x * cropSize.y * 8;
     // float* data = new float [size];
     // readBinaryFile(THESISLOCATION + "prentjes/test/bed_bufferBitterli100x100_10000spp.bin", data, size);
 
-    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, std::numeric_limits<float>::infinity(), outlierDetectorThreshold));
-    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold));
+    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, data, 10000, 0.5, 2, std::numeric_limits<float>::infinity(), outlierDetectorThreshold, additionalThresholding));
+    
+    // auto tempDetector = std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, outlierDetectorThreshold, additionalThresholding));
+    
     // auto tempDetector = std::unique_ptr<OutlierDetectorZirr1>(new OutlierDetectorZirr1(cropSize.x, cropSize.y, 2, 300, kappa, outlierDetectorThreshold));
     // auto tempDetector = std::unique_ptr<ThresholdDetector>(new ThresholdDetector());
     // auto tempDetector = std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector());
-    auto tempDetector = std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, 2.f));
-    detector = new SoftDetector(std::move(tempDetector), detectorSoftness);
+    // auto tempDetector = std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, outlierDetectorThreshold));
+    
+    assert(detectorSoftness == 0.f);
+    if (detectorType == "bitterli") {
+        detector = new SoftDetector(std::unique_ptr<OutlierDetectorBitterly>(new OutlierDetectorBitterly(cropSize.x, cropSize.y, 8, 0.5, 2, 1000, 1.f, additionalThresholding)), detectorSoftness);
+        // assert(outlierDetectorThreshold == 1.f);
+        initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
+    }
+    if (detectorType == "mean") {
+        detector = new SoftDetector(std::unique_ptr<MeanOutlierDetector>(new MeanOutlierDetector(cropSize.x, cropSize.y, iterations * samplesPerPixel, 2.f)), detectorSoftness);
+        // assert(outlierDetectorThreshold == 2.f);
+        initDetectorMean(scene, sampler);
+    }
+    if (detectorType == "all-in") {
+        detector = new SoftDetector(std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector(0.f)), detectorSoftness);
+    }
+    if (detectorType == "all-out") {
+        detector = new SoftDetector(std::unique_ptr<TestOutlierDetector>(new TestOutlierDetector(1.f)), detectorSoftness);
+    }
 
-
-    int integratorResID = sched->registerResource(this);
-
-    // Initialise the outlier detector
-    // initDetector(scene, queue, job, sceneResID, sensorResID, samplerResID, rplSamplerResID, integratorResID);
-    initDetectorMean(scene, sampler);
 
     for (iteration=1; iteration<iterations; ++iteration) {
 
@@ -175,7 +190,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
 
         cost += mltBudget;
 
-        if (nbOfChains > 0) {
+        if (use_mlt && nbOfChains > 0) {
             m_config.workUnits = std::min(nCores == 1 ? 1 : nCores*4, nbOfChains);
 
             // Pick seeds proportional to their luminance
@@ -210,7 +225,7 @@ bool MyPathTracer::myRender(Scene *scene, RenderQueue *queue, const RenderJob *j
             if (process->getReturnStatus() != ParallelProcess::ESuccess) {
                 Log(EError, "Error while mlting.");
             }    
-        }     
+        } 
 
         writeStatisticsToFile(pathSeeds.size(), nbOfChains, mltStats);
 
@@ -347,49 +362,66 @@ void MyPathTracer::initDetectorMean(const Scene *scene, Sampler *_sampler) {
     iteration = 0;
 
     auto* sampler = (MyRplSampler*) _sampler;
-    
-    ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
-            sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
-            false, false, false);
 
-    std::vector<float> samples;
-    samples.reserve(4);
+    auto init_block = [this, sampler, scene](Point2i const& block_offset, Vector2i const& block_size) {
 
-    SplatList splatList;
+        auto local_sampler = sampler->clone();
 
-    for (int y = 0; y<cropSize.y; ++y) {
-        for (int x = 0; x<cropSize.x; ++x) {
-            Point2i offset(x,y);
+        ref<PathSampler> pathSampler = new PathSampler(m_config.technique, scene,
+                sampler, sampler, sampler, m_config.maxDepth, m_config.rrDepth,
+                false, false, false);
 
-            // hash function is only needed for repeatability
-            // auto seed = createSeed(offset);
-            // auto seed = random->nextULong();
-            // sampler->reSeed(seed);
-            // sampler->generate(offset);
+        std::vector<float> samples;
+        samples.reserve(4);
+        SplatList splatList;
 
-            for (size_t j = 0; j<samplesPerPixel; j++) {
+        for (int y = 0; y<block_size.y; ++y) {
+            for (int x = 0; x<block_size.x; ++x) {
+                auto offset = Point2i(x,y) + block_offset;
+
+                for (size_t j = 0; j<samplesPerPixel; j++) {
+                    
+                    splatList.clear();
+                    pathSampler->sampleSplats(offset, splatList);
+
+                    if (splatList.luminance != 0.f) {
+                        samples.push_back(splatList.luminance);    
+                    }
+                    if (samples.size() >= 4) {
+                        break;
+                    }
+                }
                 
-                splatList.clear();
-                pathSampler->sampleSplats(offset, splatList);
-
-                if (splatList.luminance != 0.f) {
-                    samples.push_back(splatList.luminance);    
+                if (samples.size() > 0) {
+                    std::sort(samples.begin(), samples.end());
+                    float init_value = samples[samples.size()*0.4f];
+                    detector->init(offset, init_value);
+                    samples.clear();
+                } else {
+                    detector->init(offset, 0.01f);
                 }
-                if (samples.size() >= 4) {
-                    break;
-                }
-            }
-            
-            if (samples.size() > 0) {
-                std::sort(samples.begin(), samples.end());
-                float init_value = samples[samples.size()*0.4f];
-                detector->init(offset, init_value);
-                samples.clear();
-            } else {
-                detector->init(offset, 0.01f);
             }
         }
-    }
+    };
+
+    init_block(Point2i(0), cropSize);
+
+    // Vector2i block_size = cropSize/1;
+    // std::vector<std::thread> threads;
+    // threads.reserve(cropSize.x / block_size.x * cropSize.y / block_size.y);
+
+    // for (int y = 0; y<cropSize.y; y += block_size.y) {
+    //     for (int x = 0; x<cropSize.x; x += block_size.x) {
+    //         auto actual_block_size = Vector2i{std::min(block_size.x, cropSize.x - x), std::min(block_size.y, cropSize.y - y)};
+    //         init_block(Point2i(x,y), actual_block_size);
+    //     }
+    // }
+
+    // for (auto& thread : threads) {
+    //     thread.join();
+    // }
+
+
     detector->update(0);
     pathSeeds.clear();
 
@@ -402,6 +434,7 @@ void MyPathTracer::init() {
         m_config.rrDepth = props.getInteger("rrDepth", 5);
         m_config.technique = props.getBoolean("bidirectional", false) ?
             PathSampler::EBidirectional : PathSampler::EUnidirectional;
+        use_mlt = props.getBoolean("mlt", true);
 
         m_config.mutationSizeLow  = props.getFloat("mutationSizeLow",  1.0f/1024.0f);
         m_config.mutationSizeHigh = props.getFloat("mutationSizeHigh", 1.0f/64.0f);
@@ -424,6 +457,11 @@ void MyPathTracer::init() {
 
         samplesPerPixel = props.getInteger("samplesFirst", 1);
 
+        detectorType = props.getString("detector");
+        assert(detectorType == "bitterli" || detectorType == "mean" || detectorType == "all-in" || detectorType == "all-out");
+       
+        additionalThresholding = props.getBoolean("additionalThreshold", false);
+
         // Set chain lenght
         m_config.nMutations = 1000;
 
@@ -438,6 +476,7 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
 
 
     if (props.getInteger("intermediatePeriod", 0) == -1) {
+        assert(cropSize == Vector2i(100));
 
         for (int loop=0; loop<nPoints; ++loop) {
             float testValue;
@@ -475,9 +514,17 @@ bool MyPathTracer::render(Scene *scene, RenderQueue *queue, const RenderJob *job
     return true;
 }
 
- void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats mltStats) const {
+ void MyPathTracer::writeStatisticsToFile(int nOutliers, int nSeeds, MltStats const& mltStats) const {
 
-    std::ofstream myfile (THESISLOCATION + "prentjes/test/stat_output.txt", std::ios::app);
+     std::string location;
+    
+    if (intermediatePeriod == 0) {
+        location = THESISLOCATION + "prentjes/test/stat_output.txt";
+    } else {
+        location = intermediatePath + "stat_output.txt";
+    }
+    std::ofstream myfile(location, std::ios::app);
+
     if (myfile.is_open())
     {
         if (iteration == 1) {
